@@ -1,0 +1,4 @@
+# SMakeFile for AutoTest.c
+
+autotest: autotest.c asmsupport.o
+  SC:C/SC autotest.c asmsupport.o

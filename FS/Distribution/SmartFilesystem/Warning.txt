@@ -1,0 +1,26 @@
+WARNING
+=======
+
+This filesystem is BETA -- this means it is NOT finished and
+is NOT intended for normal use.
+
+Do NOT attempt to use this filesystem without having backed
+up all your data.
+
+The authors cannot be held responsible for any damage
+resulting from the proper or improper use of the Smart
+Filesystem.  USE AT YOUR OWN RISK!
+
+
+
+This version of the filesystem has been made available to
+the public for testing by people willing to risk using this
+filesystem.  These people do so at their own risk, for which
+we are very grateful.
+
+
+
+------------------------------------------------------------
+Please read SFScheck.txt as well and use SFScheck regularly.
+It will help to detect problems before they become nasty.
+------------------------------------------------------------

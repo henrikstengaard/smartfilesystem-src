@@ -1,0 +1,4 @@
+FROM LIB:c.o "BOOT:Work/FS/TestProgs/copyback.o"
+TO "BOOT:Work/FS/TestProgs/copyback"
+LIB LIB:sc.lib LIB:amiga.lib
+

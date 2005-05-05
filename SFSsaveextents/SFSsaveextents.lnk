@@ -1,0 +1,4 @@
+FROM LIB:c.o "SFSsaveextents.o"+"asmsupport.o"
+TO "SFSsaveextents"
+LIB LIB:sc.lib LIB:amiga.lib
+

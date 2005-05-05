@@ -1,0 +1,6 @@
+# SMakeFile for FileSystemMain.c
+#
+# OptimizerGlobal
+
+SFSsaveextents: SFSsaveextents.c asmsupport.o
+  SC:C/SC SFSsaveextents.c asmsupport.o

@@ -1,0 +1,14 @@
+Developer documentation is not included in this archive.
+You can find on-line developer documentation at:
+
+  http://www.xs4all.nl/~hjohn/SFS
+
+
+There however is a Include directory in the archive which
+contains C header files.  The header files are mainly there
+to give you an idea of how SFS is structured internally,
+although with a bit of tweaking they should be useable for
+development as well.
+
+There will be more support later on -- this is the best I
+could do on my own for now.

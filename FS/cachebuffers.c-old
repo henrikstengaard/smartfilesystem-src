@@ -1,0 +1,767 @@
+#include <dos/filehandler.h>
+#include <exec/memory.h>
+#include <exec/types.h>
+#include <proto/exec.h>
+
+#include "cachebuffers.h"
+#include "cachebuffers_protos.h"
+
+#include "bitmap_protos.h"
+#include "debug.h"
+#include "deviceio_protos.h"
+#include "support_protos.h"
+#include "transactions_protos.h"
+#include "transactions.h"
+
+extern struct DeviceNode *devnode;
+
+extern LONG request(UBYTE *,UBYTE *,UBYTE *,APTR, ... );
+extern void outputcachebuffer(struct CacheBuffer *cb);
+extern void dumpcachebuffers(void);
+extern void dreq(UBYTE *fmt, ... );
+
+extern WORD __asm COMPRESSFROMZERO(register __a0 UWORD *,register __a1 UBYTE *,register __d0 ULONG);
+extern void setchecksum(struct CacheBuffer *);
+
+extern ULONG blocks_total;               /* size of the partition in blocks */
+extern ULONG blocks_reserved_start;      /* number of blocks reserved at start (=reserved) */
+extern ULONG blocks_reserved_end;        /* number of blocks reserved at end (=prealloc) */
+// extern ULONG blocks_used;                /* number of blocks in use excluding reserved blocks
+//                                             (=numblockused) */
+// extern ULONG blocks_useddiff;            /* number of blocks which became used in the last operation (may be negative) */
+extern ULONG block_rovingblockptr;       /* the roving block pointer! */
+
+extern ULONG bytes_block;                /* size of a block in bytes */
+
+extern LONG totalbuffers;           /* Number of buffers currently in use by filesystem! */
+extern ULONG bufmemtype;
+
+extern LONG transactionnestcount;
+
+extern UBYTE *compressbuffer;
+
+
+
+/* Internal functions */
+
+struct CacheBuffer *copycachebuffer(struct CacheBuffer *cb);
+
+
+
+/* Internal globals */
+
+#define MINSAFETYBLOCKS (16)
+#define MINCACHESIZE    (MINSAFETYBLOCKS*2)
+#define HASHSHIFT       (6)
+#define HASHSIZE        (1<<HASHSHIFT)
+
+struct MinList cbhashlist[HASHSIZE];
+struct MinList cblrulist;
+
+
+
+LONG initcachebuffers(void) {
+  WORD n=HASHSIZE;
+
+  initlist((struct List *)&cblrulist);
+  while(n--!=0) {
+    initlist((struct List *)&cbhashlist[n]);
+  }
+
+  return(0);
+}
+
+
+
+void checkcb(struct CacheBuffer *cb,UBYTE *string) {
+  if(cb->id!=0x4A48 || cb->data!=&cb->attached_data[0] || (cb->bits & (CB_ORIGINAL|CB_EMPTY))==(CB_ORIGINAL|CB_EMPTY) || (cb->bits & (CB_ORIGINAL|CB_LATEST))==(CB_ORIGINAL|CB_LATEST) || (cb->bits & (CB_ORIGINAL|CB_LATEST|CB_EMPTY))==CB_EMPTY) {
+
+    /* Aargh, this doesn't seem to be a REAL cachebuffer... */
+
+    DEBUG(("checkcb: *** Not a valid cachebuffer!! *** %s\n",string));
+    outputcachebuffer(cb);
+    dumpcachebuffers();
+
+    request(PROGRAMNAME " request","%s\n"\
+                                   "has got an invalid cachebuffer!!\n",
+                                   "Crash...",((UBYTE *)BADDR(devnode->dn_Name))+1);
+
+  }
+}
+
+
+struct CacheBuffer *findoriginalcachebuffer(BLCK blckno) {
+  struct CacheBuffer *cb;
+
+  cb=(struct CacheBuffer *)(cbhashlist[blckno & HASHSIZE-1].mlh_Head-1);
+
+  while(cb->hashnode.mln_Succ!=0) {
+    if(cb->blckno==blckno && (cb->bits & CB_ORIGINAL)!=0) {
+      return(cb);
+    }
+    cb=(struct CacheBuffer *)(cb->hashnode.mln_Succ-1);
+  }
+
+  return(0);
+}
+
+
+
+struct CacheBuffer *findlatestcachebuffer(BLCK blckno) {
+  struct CacheBuffer *cb;
+
+  cb=(struct CacheBuffer *)(cbhashlist[blckno & HASHSIZE-1].mlh_Head-1);
+
+  while(cb->hashnode.mln_Succ!=0) {
+    if(cb->blckno==blckno && (cb->bits & CB_LATEST)!=0) {
+      return(cb);
+    }
+    cb=(struct CacheBuffer *)(cb->hashnode.mln_Succ-1);
+  }
+
+  return(0);
+}
+
+
+
+
+LONG readcachebuffer(struct CacheBuffer **returned_cb,BLCK blckno) {
+  LONG errorcode=0;
+
+  /* Obtains the specified cachebuffer by any means necessary.  This
+     function will always obtain the latest version of the block in
+     question.  It first looks for a Cachebuffer currently being
+     modified and returns that if found.  Otherwise it reads the
+     original cachebuffer and applies the most recent changes to it. */
+
+  XDEBUG((DEBUG_CACHEBUFFER,"    readcachebuffer: Reading block %ld\n",blckno));
+
+  if((*returned_cb=findlatestcachebuffer(blckno))==0) {
+    if((errorcode=applyoperation(blckno,returned_cb))==0) {
+
+      /* As long as applyoperation() returns no error then it can have returned
+         the latest cachebuffer, or it didn't find it. */
+
+      if(*returned_cb!=0) {
+        /* It found created the latest cachebuffer! */
+
+        addtailm(&cbhashlist[blckno & HASHSIZE-1],&(*returned_cb)->hashnode);
+      }
+      else {
+        /* If it gets here then the block requested was not in the
+           Transaction buffer.  In that case we simply get it using
+           readoriginalcachebuffer(). */
+
+        errorcode=readoriginalcachebuffer(returned_cb,blckno);
+      }
+    }
+  }
+  else {
+    checkcb(*returned_cb,"readcachebuffer");
+
+    removem(&(*returned_cb)->node);
+    addtailm(&cblrulist,&(*returned_cb)->node);
+  }
+
+  XDEBUG((DDEBUG_CACHEBUFFER,"    readcachebuffer: Exiting with errorcode %ld\n",errorcode));
+
+  return(errorcode);
+}
+
+
+
+
+
+LONG readoriginalcachebuffer(struct CacheBuffer **returned_cb,BLCK blckno) {
+  struct CacheBuffer *cb;
+  LONG errorcode;
+
+  /* Reads a cachebuffer from disk (if needed).  The cachebuffer will not
+     be locked.  Note that this function returns the original cachebuffer
+     (as currently stored on disk)! */
+
+  XDEBUG((DEBUG_CACHEBUFFER,"    readoriginalcachebuffer: Reading block %ld\n",blckno));
+
+  if((cb=findoriginalcachebuffer(blckno))!=0) {
+    /* We managed to find the original! */
+
+    removem(&cb->node);
+    addtailm(&cblrulist,&cb->node);
+  }
+  else if((cb=getcachebuffer())!=0) {
+    /* We found an empty cachebuffer in which we can read the original now. */
+
+    if((errorcode=read(blckno,cb->data,1))!=0) {
+      return(errorcode);
+    }
+
+    cb->blckno=blckno;
+//    cb->bits|=CB_ORIGINAL;
+//    cb->bits&=~(CB_EMPTY|CB_CHECKSUM);
+    cb->bits=CB_ORIGINAL;
+
+    addtailm(&cbhashlist[blckno & HASHSIZE-1],&cb->hashnode);
+  }
+  else {
+    return(ERROR_NO_FREE_STORE);
+  }
+
+  /* We either found the original, or just read it succesfully. */
+
+  XDEBUG((DDEBUG_CACHEBUFFER,"    readoriginalcachebuffer: Exiting normally\n"));
+
+  *returned_cb=cb;
+  return(0);
+}
+
+
+
+void emptyoriginalcachebuffer(BLCK blckno) {
+  struct CacheBuffer *cb;
+
+  if((cb=findoriginalcachebuffer(blckno))!=0) {
+    /* We managed to find the original! */
+    emptycachebuffer(cb);
+  }
+}
+
+
+
+void resetcachebuffer(struct CacheBuffer *cb) {
+  /* Resets the CacheBuffer to its default state.  All fields are resetted
+     to their defaults, the CacheBuffer will be properly delinked */
+
+  checkcb(cb,"resetcachebuffer");
+
+  if(cb->hashnode.mln_Succ!=0 && cb->hashnode.mln_Pred!=0) {
+    removem(&cb->hashnode);
+  }
+
+  cb->hashnode.mln_Succ=0;
+  cb->hashnode.mln_Pred=0;
+  cb->locked=0;
+  cb->bits=0;
+  cb->error=0;
+  cb->blckno=0;
+}
+
+
+
+void emptycachebuffer(struct CacheBuffer *cb) {
+  /* Empties the CacheBuffer so it can be used for new data.  All fields are
+     resetted to their defaults, the CacheBuffer will be properly delinked */
+
+  resetcachebuffer(cb);
+
+  /* Add empty buffer to head of LRU chain.  This will not only increase
+     performance when looking for a free buffer, but it will also ensure
+     that EMPTY buffers are reused first, while otherwise a potentially
+     useful buffer could be reused. */
+
+  removem(&cb->node);
+//  addheadm(&cblrulist,&cb->node);
+  AddHead((struct List *)&cblrulist,(struct Node *)&cb->node);
+}
+
+
+
+void lockcachebuffer(struct CacheBuffer *cb) {
+  /* Make absolutely sure the cachebuffer in question is unlocked
+     again (as many times as it was locked!), or face the
+     consequences... */
+
+  checkcb(cb,"lockcachebuffer");
+
+  #ifdef CHECKCODE
+    if((cb->bits & CB_ORIGINAL)!=0 && findlatestcachebuffer(cb->blckno)!=0) {
+      dreq("Original cachebuffers may not be locked.\nPlease notify the author!");
+      outputcachebuffer(cb);
+    }
+  #endif
+
+  cb->locked++;
+}
+
+
+
+void unlockcachebuffer(struct CacheBuffer *cb) {
+  if(cb!=0 && cb->locked!=0) {
+    checkcb(cb,"unlockcachebuffer");
+    cb->locked--;
+  }
+  else if(cb!=0) {
+    dreq("unlockcachebuffer: cb->locked was zero!");
+  }
+}
+
+
+
+struct CacheBuffer *newcachebuffer(BLCK blckno) {
+  struct CacheBuffer *cb;
+
+  /* Looks for an unused cachebuffer and clears it.  This cachebufer
+     doesn't have an original (it was marked free, and thus contains
+     junk) so it will be treated as if it was zero-filled. */
+
+  if((cb=findlatestcachebuffer(blckno))!=0 || (cb=getcachebuffer())!=0) {
+    if(cb->blckno==0) {
+      cb->blckno=blckno;
+      addtailm(&cbhashlist[blckno & HASHSIZE-1],&cb->hashnode);
+    }
+    cb->bits|=CB_LATEST|CB_EMPTY;
+    cb->bits&=~(CB_ORIGINAL);
+
+    clearcachebuffer(cb);
+    lockcachebuffer(cb);
+
+    #ifdef CHECKCODE
+       if(transactionnestcount==0) {
+         dreq("No transaction was started when newcachebuffer() was called!\nPlease notify the author!");
+         outputcachebuffer(cb);
+       }
+    #endif
+
+    return(cb);
+  }
+
+  return(0);
+}
+
+
+
+void preparecachebuffer(struct CacheBuffer *cb) {
+  /* Prepares a cachebuffer to be changed.  A copy of the original is kept
+     for later comparison, but the copy is available for reuse.  If the
+     cachebuffer is already a newer version then no copy of the original
+     needs to be made.
+
+     Note: Because the this function doesn't require both the original and
+           the modified version to be locked in memory, there will ALWAYS
+           be enough room to succesfully execute this function.  In the
+           worst case it will simply immediately use the current version! */
+
+  #ifdef CHECKCODE
+     if(transactionnestcount==0) {
+       dreq("No transaction was started when preparecachebuffer() was called!\nPlease notify the author!");
+       outputcachebuffer(cb);
+     }
+  #endif
+
+  checkcb(cb,"preparecachebuffer");
+
+  lockcachebuffer(cb);
+  if((cb->bits & CB_ORIGINAL)!=0) {
+    /* We're copying the cachebuffer below, but we don't care about the
+       destination.  All we care about is that this way the original will
+       reside in the cache a little bit longer (it is very likely that
+       storecachebuffer() is called soon after this call, and it would help
+       if the original still resides in the cache at that time).
+
+       In any case, whether the copycachebuffer function succeeds or fails,
+       after this operation the passed in cachebuffer is no longer considered
+       original. */
+
+    cb->bits|=CB_LATEST;
+    cb->bits&=~(CB_ORIGINAL);
+    if(findoriginalcachebuffer(cb->blckno)==0) {
+      /* We didn't find any original cachebuffer anymore for this blckno.  In
+         that case try to make a copy, and mark the copy as the original. */
+      if((cb=copycachebuffer(cb))!=0) {
+        /* Copy succesful! */
+        cb->bits|=CB_ORIGINAL;
+        cb->bits&=~(CB_LATEST|CB_EMPTY);
+            }
+    }
+  }
+}
+
+
+
+struct CacheBuffer *saveoriginalcachebuffer(struct CacheBuffer *cb) {
+  struct CacheBuffer *cb_new;
+
+  /* Makes a copy of the original CacheBuffer into another free CacheBuffer.
+     The new location of the original CacheBuffer is returned.  The old
+     location is converted into a CB_LATEST CacheBuffer. */
+
+  #ifdef CHECKCODE
+    if((cb->bits & CB_ORIGINAL)==0) {
+      dreq("saveoriginalcachebuffer: Only originals may be saved.\nPlease notify the author!");
+    }
+    else if(findlatestcachebuffer(cb->blckno)!=0) {
+      dreq("saveoriginalcachebuffer: Fatal error.\nPlease notify the author!");
+    }
+  #endif
+
+  lockcachebuffer(cb);      /* Lock original */
+
+  cb_new=getcachebuffer();
+
+  unlockcachebuffer(cb);
+
+  cb_new->blckno=cb->blckno;
+  cb_new->bits=CB_ORIGINAL;
+
+  cb->bits&=~CB_ORIGINAL;
+  cb->bits|=CB_LATEST;
+
+  CopyMemQuick(cb->data, cb_new->data, bytes_block);
+
+  addtailm(&cbhashlist[cb_new->blckno & HASHSIZE-1],&cb_new->hashnode);
+
+  return(cb_new);
+}
+
+
+
+LONG compresscachebuffer(struct CacheBuffer *cb_org,struct CacheBuffer *cb_new) {
+  UWORD length;
+  UBYTE bits=0;
+
+  /* cb_org can be 0, in which case we mean a CacheBuffer filled with zeroes. */
+
+  /* This function creates a new transaction using the 2 cachebuffers passed in */
+
+  if(cb_org!=0) {
+    length=compress(cb_org->data,cb_new->data,compressbuffer);
+  }
+  else {
+//    length=compressfromzero(cb_new->data,compressbuffer);
+    length=COMPRESSFROMZERO(cb_new->data,compressbuffer,bytes_block);
+  }
+
+  if((cb_new->bits & CB_EMPTY)!=0) {
+    bits=OI_EMPTY;
+  }
+
+  return(addoperation(cb_new->blckno,compressbuffer,length,bits));
+}
+
+
+
+LONG storecachebuffer(struct CacheBuffer *cb) {
+  struct CacheBuffer *cb_org=0;
+  ULONG blocksfree;
+  LONG errorcode;
+
+  #ifdef CHECKCODE
+     if(transactionnestcount==0) {
+       dreq("No transaction was started when storecachebuffer() was called!\nPlease notify the author!");
+       outputcachebuffer(cb);
+     }
+  #endif
+
+  /* This function guarantees that the passed in cachebuffer is stil valid
+     after calling this function.  This is because there still is a lock
+     imposed by preparecachebuffer() which is only removed at the end of
+     this function. */
+
+  checkcb(cb,"storecachebuffer");
+
+  setchecksum(cb);
+
+  if((errorcode=getfreeblocks(&blocksfree))==0) {
+
+    if(blocksfree >= transactionspace()) {
+      /* Any changes made to this cachebuffer are stored in the transaction
+         buffer. */
+
+      if((cb->bits & CB_EMPTY)==0) {
+        errorcode=readoriginalcachebuffer(&cb_org,cb->blckno);
+      }
+
+      if(errorcode==0) {
+        errorcode=compresscachebuffer(cb_org,cb);
+      }
+    }
+    else {
+      errorcode=ERROR_DISK_FULL;
+    }
+
+  }
+
+  unlockcachebuffer(cb);
+
+  return(errorcode);
+}
+
+
+
+void dumpcachebuffer(struct CacheBuffer *cb) {
+  /* Any changes made to this cachebuffer will not be stored, and this
+     cachebuffer will be emptied. */
+
+  emptycachebuffer(cb);
+}
+
+
+
+void dumpcachebuffers3(void) {
+  struct CacheBuffer *cb;
+
+  cb=(struct CacheBuffer *)cblrulist.mlh_Head;
+
+  while(cb->node.mln_Succ!=0) {
+    checkcb(cb,"dump/getcachebuffer");
+    cb=(struct CacheBuffer *)(cb->node.mln_Succ);
+  }
+}
+
+
+
+struct CacheBuffer *getcachebuffer() {
+  struct CacheBuffer *cb;
+  LONG buffers=totalbuffers;
+
+  /* It's absolutely essential that getcachebuffer always uses the
+     LEAST recently used cachebuffer which isn't currently used in
+     an operation.  The reason for this is not only because this is
+     a good algorithm to ensure the cache contains blocks which are
+     the most often used, but also because a lot of functions -rely-
+     on the fact that a buffer which has been used (read!) recently
+     remains in the cache for a while longer(!).
+
+     Because this process of 'relying' on a recently read buffer to
+     still be in cache is a bit tricky business, we recently added
+     locking functions.  These functions (lockcachebuffer() &
+     unlockcachebuffer() can prevent this function from returning
+     the cachebuffer in question for re-use.  Only this function is
+     effected by this locking process.  Always make sure the cache
+     buffer is unlocked again! */
+
+  do {
+    cb=(struct CacheBuffer *)cblrulist.mlh_Head;
+
+    removem(&cb->node);
+    addtailm(&cblrulist,&cb->node);
+
+  } while(buffers-->0 && cb->locked>0);
+
+  if(buffers<=0) {
+    XDEBUG((DEBUG_CACHEBUFFER,"getcachebuffer: No more cachebuffers available!\n"));
+    dumpcachebuffers();
+
+    request(PROGRAMNAME " request","%s\n"\
+                                   "hasn't got enough buffers to complete the current\n"\
+                                   "request.  Please increase the number of buffers.\n",
+                                   "Ok",((UBYTE *)BADDR(devnode->dn_Name))+1);
+
+    return(0);
+  }
+
+  resetcachebuffer(cb);  /* emptycachebuffer also adds cachebuffer at top of LRU list... we don't want that. */
+
+  return(cb);
+}
+
+
+void clearcachebuffer(struct CacheBuffer *cb) {
+  ULONG blocksize=bytes_block>>4;
+  ULONG *block=cb->data;
+
+  checkcb(cb,"clearcachebuffer");
+
+  while(blocksize--!=0) {
+    *block++=0;
+    *block++=0;
+    *block++=0;
+    *block++=0;
+  }
+}
+
+
+
+LONG writecachebuffer(struct CacheBuffer *cb) {
+
+  checkcb(cb,"writecachebuffer");
+
+  return(write(cb->blckno,cb->data,1));
+}
+
+
+
+void dumpcachebuffers(void) {
+  struct CacheBuffer *cb;
+
+  cb=(struct CacheBuffer *)cblrulist.mlh_Head;
+
+  DEBUG(("Blck-- Lock Bits Error--- Data---- ID------ cb-adr-- Hashed?\n"));
+  while(cb->node.mln_Succ!=0) {
+    DEBUG(("%6ld %4ld %4ld %08lx %08lx %08lx %08lx ",cb->blckno,(LONG)cb->locked,(LONG)cb->bits,cb->error,cb->data,*(ULONG *)cb->data,cb));
+    if(cb->hashnode.mln_Succ==0 && cb->hashnode.mln_Pred==0) {
+      DEBUG(("No\n"));
+    }
+    else {
+      DEBUG(("Yes\n"));
+    }
+
+    cb=(struct CacheBuffer *)(cb->node.mln_Succ);
+  }
+}
+
+
+
+void dumpcachebuffers2(void) {
+  struct CacheBuffer *cb;
+  ULONG cnt=0;
+
+  cb=(struct CacheBuffer *)cblrulist.mlh_Head;
+
+  while(cb->node.mln_Succ!=0) {
+    cnt++;
+    cb=(struct CacheBuffer *)(cb->node.mln_Succ);
+  }
+
+  if(cnt!=totalbuffers) {
+    DEBUG(("------------ cachebuffers have been killed!! ---------------\n"));
+    dumpcachebuffers();
+  }
+}
+
+
+
+
+LONG addcachebuffers(LONG buffers) {
+  struct CacheBuffer *cb;
+  LONG newbuffers;
+  LONG counter=0;
+  LONG errorcode=0;
+
+  newbuffers=totalbuffers+buffers;
+
+  if(newbuffers<MINCACHESIZE) {
+    newbuffers=MINCACHESIZE;
+  }
+
+  buffers=newbuffers-totalbuffers;
+  /* if buffers is positive than add 'buffers' buffers, else free some */
+
+  if(buffers<0) {
+    if((errorcode=flushcachebuffers())!=0) {
+      return(errorcode);
+    }
+  }
+
+  if(buffers>0) {
+    DEBUG(("Allocating buffers\n"));
+
+    while(buffers!=0 && (cb=AllocMem(bytes_block+sizeof(struct CacheBuffer),MEMF_CLEAR|bufmemtype))!=0) {
+      DEBUG(("*"));
+      counter++;
+      addtailm(&cblrulist,&cb->node);
+      buffers--;
+
+      cb->data=&cb->attached_data[0];
+      cb->id=0x4A48;
+    }
+    DEBUG((" end\n"));
+
+    if(buffers!=0) {
+      DEBUG(("Allocation failed!\n"));
+
+      buffers=-counter;      /* This makes sure that the already allocated buffers are freed again */
+      newbuffers=totalbuffers;
+      errorcode=ERROR_NO_FREE_STORE;
+    }
+  }
+
+  if(buffers<0) {
+    while(buffers++!=0) {
+      cb=(struct CacheBuffer *)cblrulist.mlh_TailPred;
+      RemTail((struct List *)&cblrulist);
+      resetcachebuffer(cb);
+      FreeMem(cb,sizeof(struct CacheBuffer)+bytes_block);
+    }
+  }
+
+  totalbuffers=newbuffers;
+
+  return(errorcode);
+}
+
+
+
+LONG flushcachebuffers() {
+  struct CacheBuffer *cb;
+  LONG errorcode;
+
+  /* This function invalidates all cache buffers, something which is necessary
+     for example when the drive has been inhibited, or when a new media is
+     inserted. */
+
+  if((errorcode=flushtransaction())==0) {
+    if((errorcode=cleariocache())==0) {
+      block_rovingblockptr=0;
+
+      for(cb=(struct CacheBuffer *)cblrulist.mlh_Head; cb!=(struct CacheBuffer *)&cblrulist.mlh_Tail; cb=(struct CacheBuffer *)cb->node.mln_Succ) {
+        resetcachebuffer(cb);
+      }
+    }
+  }
+
+  return(errorcode);
+}
+
+
+CacheBuffer types:
+------------------
+
+CB_ORIGINAL - Indicates that the CacheBuffer is a direct
+copy of the one stored on disk.
+
+CB_LATEST - Indicates that this CacheBuffer is the most
+recent version of the block.  It also means that this
+CacheBuffer can be locked.
+
+If neither of these flags is set then the CacheBuffer is
+considered unused.
+
+For every CacheBuffer with CB_LATEST set, there must be a
+CacheBuffer (for the same block) with CB_ORIGINAL set (this
+could be the same CacheBuffer).
+
+A CacheBuffer can be reused if the following criteria are
+met:
+
+ - The CacheBuffer is not locked, and
+
+ - If the CacheBuffer is CB_ORIGINAL, but not CB_LATEST
+   then it must not have a corresponding CB_LATEST
+   CacheBuffer.  In other words, originals don't get
+   reused if there is a later version of the same block
+   still in cache.
+
+
+readcachebuffer()
+
+Returns a cachebuffer with the latest version of a block
+(CB_LATEST set).  The original cachebuffer is read if not
+already present.
+
+applyoperation()
+
+Requires a cachebuffer and if needed an original version of
+that block.
+
+readoriginalcachebuffer()
+
+Returns a cachebuffer with the original version of a block.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

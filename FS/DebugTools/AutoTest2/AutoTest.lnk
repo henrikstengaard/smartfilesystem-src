@@ -1,0 +1,4 @@
+FROM LIB:c.o "AutoTest.o"+"asmsupport.o"
+TO "AutoTest"
+LIB LIB:sc.lib LIB:amiga.lib
+

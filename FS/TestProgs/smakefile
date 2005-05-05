@@ -1,0 +1,62 @@
+#
+# Makefile for the test programs.
+#
+
+# List of test programs you want to build; simply extend the list if
+# programs are added. Also, add rules in the lower part of this file.
+
+TESTPROGS=writeandseek writeandread simplewrite overlappingwrite writeandverify writeandverify2 dualhandlerwrite modereadwrite modereadwrite2 modereadwrite3 lotsoffiles lotsofsmallfiles varwrite
+
+### Symbolic targets ###
+
+all: $(TESTPROGS)
+
+clean:
+	delete \#?.(o|bak|lnk|refs|info)
+
+delete:
+	delete \#?.(o|bak|lnk|refs|info) $(TESTPROGS)
+
+install:
+	copy $(TESTPROGS) DF0:
+
+### Rules ###
+
+writeandseek: writeandseek.c
+	sc writeandseek
+
+writeandread: writeandread.c
+	sc writeandread
+
+simplewrite: simplewrite.c
+	sc simplewrite
+
+overlappingwrite: overlappingwrite.c
+	sc overlappingwrite
+
+writeandverify: writeandverify.c
+	sc writeandverify
+
+writeandverify2: writeandverify2.c
+	sc writeandverify2
+
+dualhandlerwrite: dualhandlerwrite.c
+	sc dualhandlerwrite
+
+modereadwrite: modereadwrite.c
+	sc modereadwrite
+
+modereadwrite2: modereadwrite2.c
+	sc modereadwrite2
+
+modereadwrite3: modereadwrite3.c
+	sc modereadwrite3
+
+lotsoffiles: lotsoffiles.c
+	sc lotsoffiles
+
+lotsofsmallfiles: lotsofsmallfiles.c
+	sc lotsofsmallfiles
+
+varwrite: varwrite.c
+	sc varwrite

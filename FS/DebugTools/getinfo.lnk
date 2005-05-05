@@ -1,0 +1,4 @@
+FROM LIB:c.o "BOOT:Work/FS/DebugTools/getinfo.o"
+TO "BOOT:Work/FS/DebugTools/getinfo"
+LIB LIB:sc.lib LIB:amiga.lib
+

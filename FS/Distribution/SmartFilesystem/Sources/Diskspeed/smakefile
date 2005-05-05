@@ -1,0 +1,4 @@
+# SMakeFile for DiskSpeed.c
+
+DiskSpeed: DiskSpeed.c FVasm.o
+  SC:C/SC DiskSpeed.c FVasm.o

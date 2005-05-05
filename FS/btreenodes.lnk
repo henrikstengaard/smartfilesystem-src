@@ -1,0 +1,6 @@
+FROM "BOOT:Work/FS/btreenodes.o"
+TO "BOOT:Work/FS/btreenodes"
+LIB LIB:sc.lib LIB:amiga.lib
+NOICONS
+DEFINE @__chkabort=@__dummy
+

@@ -1,0 +1,6 @@
+FROM "filesystemmain.o"+"adminspaces.o"+"bitmap.o"+"btreenodes.o"+"cachebuffers.o"+"cachedio.o"+"debug.o"+"deviceio.o"+"locks.o"+"nodes.o"+"objects.o"+"support.o"+"transactions.o"+"asmsupport.o"
+TO "filesystemmain"
+LIB lib:amiga.lib lib:debug.lib LIB:sc.lib LIB:amiga.lib
+NOICONS
+DEFINE @__chkabort=@__dummy
+

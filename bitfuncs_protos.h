@@ -1,0 +1,13 @@
+#include <exec/types.h>
+
+WORD bfffo(ULONG,WORD);
+WORD bfffz(ULONG,WORD);
+WORD bfffz8(UBYTE,WORD);
+WORD bfco(ULONG);
+ULONG bfset(ULONG,WORD,WORD);
+ULONG bfclr(ULONG,WORD,WORD);
+
+LONG bmffo(ULONG *,LONG,LONG);
+LONG bmffz(ULONG *,LONG,LONG);
+LONG bmclr(ULONG *,LONG,LONG,LONG);
+LONG bmset(ULONG *,LONG,LONG,LONG);

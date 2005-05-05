@@ -1,0 +1,4 @@
+FROM LIB:c.o "BOOT:Work/FS/DebugTools/setcache.o"
+TO "BOOT:Work/FS/DebugTools/setcache"
+LIB LIB:sc.lib LIB:amiga.lib
+

@@ -1,0 +1,6 @@
+
+To do:
+
+ - Random writes with reproducable seed to more than one device at the same time,
+   followed by a compare.
+

@@ -1,0 +1,6 @@
+FROM "BOOT:Work/FS/cachedio.o"
+TO "BOOT:Work/FS/cachedio"
+LIB LIB:sc.lib LIB:amiga.lib
+NOICONS
+DEFINE @__chkabort=@__dummy
+

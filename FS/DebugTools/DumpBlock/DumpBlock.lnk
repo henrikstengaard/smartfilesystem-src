@@ -1,0 +1,4 @@
+FROM LIB:c.o "DumpBlock.o"+"asmsupport.o"
+TO "DumpBlock"
+LIB LIB:sc.lib LIB:amiga.lib
+

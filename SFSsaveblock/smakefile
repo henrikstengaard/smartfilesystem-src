@@ -1,0 +1,6 @@
+# SMakeFile for SFSsaveblock.c
+#
+# OptimizerGlobal
+
+sfssaveblock: sfssaveblock.c /fs/deviceio.o /fs/cachedio.o /fs/asmsupport.o
+  SC:C/SC sfssaveblock.c /fs/deviceio.o /fs/cachedio.o /fs/asmsupport.o

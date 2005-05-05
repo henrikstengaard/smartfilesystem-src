@@ -1,0 +1,91 @@
+SAS/C_SMAKE 6.58 (27.12.96)
+Copyright (c) 1988-1995 SAS Institute, Inc.
+        SC:C/SC debug.c NOLINK
+SAS/C Amiga Compiler 6.58
+Copyright (c) 1988-1995 SAS Institute Inc.
+debug.c 205 Warning 105: module does not define any externally-known symbols
+        SC:C/SC cachebuffers.c NOLINK
+SAS/C Amiga Compiler 6.58
+Copyright (c) 1988-1995 SAS Institute Inc.
+cachebuffers.c 148 Note 306: __inline function inlined: "mrucachebuffer"
+cachebuffers.c 173 Note 306: __inline function inlined: "mrucachebuffer"
+cachebuffers.c 696 Note 306: __inline function inlined: "mrucachebuffer"
+        SC:C/SC adminspaces.c NOLINK
+SAS/C Amiga Compiler 6.58
+Copyright (c) 1988-1995 SAS Institute Inc.
+        SC:C/SC bitmap.c NOLINK
+SAS/C Amiga Compiler 6.58
+Copyright (c) 1988-1995 SAS Institute Inc.
+        SC:C/SC btreenodes.c NOLINK
+SAS/C Amiga Compiler 6.58
+Copyright (c) 1988-1995 SAS Institute Inc.
+btreenodes.c 259 Note 306: __inline function inlined: "copywordsforward"
+btreenodes.c 463 Note 306: __inline function inlined: "copywordsforward"
+btreenodes.c 469 Note 306: __inline function inlined: "copywordsforward"
+btreenodes.c 484 Note 306: __inline function inlined: "copywordsforward"
+btreenodes.c 515 Note 306: __inline function inlined: "copywordsbackward"
+btreenodes.c 517 Note 306: __inline function inlined: "copywordsforward"
+btreenodes.c 537 Note 306: __inline function inlined: "copywordsforward"
+btreenodes.c 644 Note 306: __inline function inlined: "copywordsforward"
+        SC:C/SC support.c NOLINK
+SAS/C Amiga Compiler 6.58
+Copyright (c) 1988-1995 SAS Institute Inc.
+        SC:C/SC deviceio.c NOLINK
+SAS/C Amiga Compiler 6.58
+Copyright (c) 1988-1995 SAS Institute Inc.
+        SC:C/SC cachedio.c NOLINK
+SAS/C Amiga Compiler 6.58
+Copyright (c) 1988-1995 SAS Institute Inc.
+        SC:C/SC nodes.c NOLINK
+SAS/C Amiga Compiler 6.58
+Copyright (c) 1988-1995 SAS Institute Inc.
+        SC:C/SC objects.c NOLINK
+SAS/C Amiga Compiler 6.58
+Copyright (c) 1988-1995 SAS Institute Inc.
+        SC:C/SC locks.c NOLINK
+SAS/C Amiga Compiler 6.58
+Copyright (c) 1988-1995 SAS Institute Inc.
+        SC:C/SC transactions.c NOLINK
+SAS/C Amiga Compiler 6.58
+Copyright (c) 1988-1995 SAS Institute Inc.
+transactions.c 147 Note 306: complexity=2 function inlined: "InitRedBlackTree"
+transactions.c 914 Note 306: complexity=1 function inlined: "hastransaction"
+        SC:C/SC filesystemmain.c adminspaces.o bitmap.o btreenodes.o cachebuffers.o cachedio.o debug.o deviceio.o locks.o nodes.o objects.o sup
+port.o transactions.o asmsupport.o lib:amiga.lib lib:debug.lib
+SAS/C Amiga Compiler 6.58
+Copyright (c) 1988-1995 SAS Institute Inc.
+filesystemmain.c 6810 Warning 315: Static variable is unreachable "ver_version"
+filesystemmain.c 6810 Warning 315: Static variable is unreachable "resident"
+filesystemmain.c 887 Note 306: complexity=2 function inlined: "setchecksum"
+filesystemmain.c 920 Note 306: complexity=2 function inlined: "setchecksum"
+filesystemmain.c 942 Note 306: complexity=2 function inlined: "setchecksum"
+filesystemmain.c 959 Note 306: complexity=2 function inlined: "setchecksum"
+filesystemmain.c 981 Note 306: complexity=2 function inlined: "setchecksum"
+filesystemmain.c 1026 Note 306: complexity=2 function inlined: "setchecksum"
+filesystemmain.c 1057 Note 306: complexity=2 function inlined: "setchecksum"
+filesystemmain.c 1124 Note 306: complexity=2 function inlined: "setchecksum"
+filesystemmain.c 1170 Note 306: complexity=2 function inlined: "setchecksum"
+filesystemmain.c 1178 Note 306: complexity=2 function inlined: "setchecksum"
+filesystemmain.c 1253 Note 306: complexity=2 function inlined: "setchecksum"
+filesystemmain.c 1739 Note 306: complexity=2 function inlined: "setchecksum"
+filesystemmain.c 3736 Note 306: complexity=1 function inlined: "invalidatecaches"
+filesystemmain.c 4950 Note 306: complexity=2 function inlined: "createextentbnode"
+filesystemmain.c 4978 Note 306: complexity=2 function inlined: "createextentbnode"
+filesystemmain.c 5578 Note 306: complexity=2 function inlined: "createextentbnode"
+filesystemmain.c 5854 Note 306: complexity=2 function inlined: "enough_for_add_moved"
+filesystemmain.c 6226 Note 306: complexity=1 function inlined: "newfragmentinit_large"
+filesystemmain.c 6300 Note 306: complexity=1 function inlined: "newfragmentend_large"
+filesystemmain.c 6414 Note 306: complexity=1 function inlined: "newfragmentinit_large"
+filesystemmain.c 6463 Note 306: complexity=1 function inlined: "newfragmentend_large"
+filesystemmain.c 6466 Note 306: complexity=1 function inlined: "newfragmentend_small"
+filesystemmain.c 6466 Note 306: complexity=1 function inlined: "newfragmentend_large" from line 6300
+Slink - Version 6.50
+Copyright (c) 1988-1993 SAS Institute, Inc.  All Rights Reserved.
+
+Warning 624: Absolute reference to symbol _LinkerDB
+ module: deviceio.c     file: deviceio.o        offset: 0000061e
+
+
+SLINK Complete - Maximum code size = 71720 ($00011828) bytes
+
+Final output file size = 60456 ($0000ec28) bytes

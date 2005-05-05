@@ -1,0 +1,1487 @@
+Version notes
+=============
+
+Versions are numbered as follows:
+
+<major public release>.<minor public release>.<internal revision>
+
+-------------------------------------------------------------------------------|
+                                                                               |
+First reasonably well working version.                                         |
+                                                                               |
+date   version                                                                 |
+-------------------------------------------------------------------------------|
+ 2 Jan 0.1  FIX: Fixed bug in name comparing routine when looking through a
+            hash chain for a specific name.
+       0.2  NEW: Added packets ACTION_SET_PROTECT and ACTION_SET_DATE.
+       0.3  NEW: Added packets ACTION_EXAMINE_FH, ACTION_PARENT_FH and
+            ACTION_COPY_DIR_FH.
+
+ 3 Jan 0.4  NEW: Extents will now be extended when adding new data to a file,
+            if possible.
+       0.5  NEW: Extended Transactions to allow for multiple transactions to
+            be kept in memory before flushing them.
+
+ 4 Jan 0.6  NEW: Cleaned up the transaction system.  It is now considerably
+            faster than before.
+
+ 7 Jan 0.7  NEW: Added packets ACTION_CURRENT_VOLUME and ACTION_MORE_CACHE.
+       0.8  NEW: MaxTransfer is now supported.  MaxTransfer however will have
+            a minimum size equal to the blocksize used by the volume.
+       0.9  NEW: ACTION_FH_FROM_LOCK (OpenFromLock()) is now supported.
+       0.10 NEW: Rewritten the function which opens and creates new files to
+            be more generic and to add support for ACTION_FINDUPDATE.
+       0.11 NEW: Protection bits Read, Write & Delete are now respected.
+
+ 9 Jan 0.12 NEW: ACTION_SET_COMMENT has been implemented.  Also added an
+            extra check when reading blocks to see if the block has the same
+            block number as the block the filesystem thought it was reading.
+       0.13 FIX: Renaming a file caused the comment to be lost.  The first
+            character of the comment was lost getting a directory.
+
+11 Jan 0.14 NEW: Added a couple of speed-ups to the filesystem.  The
+            filesystem now reads extra data to fill its cache quicker.  This
+            improved directory reading speed by 50%.
+
+12 Jan 0.15 NEW: Changed the way AdminSpaceContainers works.  This will later
+            allow us to add alignment restrictions to Admin spaces which the
+            read-ahead functions can make good use of.
+
+17 Jan 0.16 FIX: Large bitmaps caused a complete cache flush when determining
+            the amount of free blocks which in turn caused an error because
+            of an unlocked cachebuffer.
+
+19 Jan 0.17 NEW: ExtentIndex tree can now be extended on demand.  This should
+            increase the maximum number of Extents on a single partition to
+            the intended maximum of about 4 billion.
+
+25 Jan 0.18 Major rewrite of the Extent system.  It now uses a slightly
+            different block format.  Extents are stored in a tree like
+            structure, what we've done is to make this tree-like structuring
+            generic, and Extents are now making use of these new generic
+            functions.
+
+ 2 Feb 0.19 Major rewrite of the filesystem.  It turned out an I-Node style
+            system was favourable after all -- it seems everything is back
+            into working order again.  The rewrite actually went quite
+            smooth.
+
+ 5 Feb 0.20 Cleaned up the source; removed old functions and old comments and
+            split the source up in a few different object files.
+
+10 Feb 0.21 Removed the read-ahead system at CacheBuffer level, and instead
+            added a small caching system just above the device level.  This
+            works far more effective than the old system.
+
+22 Feb 0.22 Fixed a bug in freeadminspace() which occasionally could cause
+            crashes.  Also sped up the CacheBuffer system considerably.
+
+ 5 Mar 0.23 Fixed several small bugs and Enforcer hits.
+
+ 7 Mar 0.24 Extents are now stored in a sorted B+-Tree instead of assigning
+            Extents a number and putting them in a fixed slot.  The advantage
+            is that the new tree is sorted by start block number and that
+            this tree grows and shrinks better on demand.
+
+ 8 Mar 0.25 Extents are now doubly linked to facilitate deleting of Extents,
+            seeking backwards in files and later to make it easier to
+            defragment files.  Extents however now consume about 30% more
+            space.
+
+13 Mar 0.26 Made a beginning with Notification.  I noticed however that there
+            are few applications using it (correctly).  DOpus 5 for example
+            checks the modification date of the parent directory to see if
+            there were changes...
+
+15 Mar 0.27 Added code to update the date of the parent directory when a file
+            is added or removed from a directory.  The archive bit is cleared
+            as well.
+       0.28 Added code to clear the archive bit when a file is modified by
+            ACTION_WRITE or ACTION_SET_FILE_SIZE.  The same code also changes
+            the date of the file and sends out a notification.
+
+16 Mar 0.29 MaxTransfer code was broken since version 0.21 -- fixed again.  Now
+            respects SectorsPerBlock correctly.
+
+17 Mar 0.30 ACTION_RENAME_DISK is now supported.
+
+18 Mar 0.31 Flushing of the Transaction to unused areas of the disk
+            implemented.
+
+20 Mar 0.32 Cleaned up Transaction & Operations code.
+       0.33 If there was an unfinished transaction on disk when the disk gets
+            initialized it will be loaded and finished before using the disk.
+
+21 Mar 0.34 The Transaction flushing system now makes sure there is always
+            enough space left on disk to flush the transaction.
+
+22 Mar 0.35 Improved code which handles volumenodes upon disk-changes.  No
+            empty volumenode is created anymore when it isn't a valid DOS disk.
+            Volumenode is now used to pass the LockList.
+       0.36 Added NSD 64-bit support and TD64 64-bit support.
+
+26 Mar 0.37 Added code for SCSIdirect support.
+       0.38 The timeout to turn the motor off and to flush any Transactions
+            is now only (re)set when there was a physical disk-access.  The
+            timeout is also (re)set when a Transaction was succesfully
+            completed (even if this didn't cause a physical disk-access
+            because of caching).
+
+29 Mar 0.39 Implemented a Red Black balanced tree for the internal
+            Transaction structure.  Thanks to this a lot of functions are a lot
+            faster now.
+       0.40 Blocks are now flushed in low to high order, thanks to the new
+            internal tree structuring.
+
+31 Mar 0.41 Spend the day fixing an obscure bug in the new Transaction code
+            introduced in version 0.39 -- I knew that it was too good to be
+            true that the code worked immediately at the time :-)
+
+ 6 Apr 0.42 Directories no longer can be opened as if they are files.
+       0.43 ACTION_SET_FILE_SIZE now implemented.  Both the V39 FastFileSystem
+            and the V39 RAM-Handler implement this packet differently and
+            incorrectly.
+
+ 7 Apr 0.44 Fixed another hard to trace bug introduced in version 0.39.  The
+            bug was in applyoperation() which didn't continue to look if there
+            was a new version of an operation if it already found an old one.
+            Also fixed a bug in ACTION_END (date of object was changed without
+            having started a new transaction).
+
+ 8 Apr 0.45 Added some code to ignore ACTION_INHIBIT packets which try to
+            revoke the inhibit while the drive wasn't inhibited.  This fixes
+            the problem that when Workbench loads the volume suddenly becomes
+            unuseable.
+       0.46 Added the remaining code for notification.
+
+10 Apr 0.47 Fixed a bug in the code which looks for our volumenode after a
+            diskchange.  Also fixed a related bug when the date of the ROOT
+            directory is changed -- in this case the date of our volume node
+            must be updated as well.
+
+13 Apr 0.48 Added full support for EXAMINE_ALL.  Added resident tag so you can
+            c:version the filesystem drive.
+
+18 Apr 0.49 EXAMINE_ALL now returns ERROR_BAD_NUMBER when unsupported type is
+            passed.
+       0.50 Increased functionality of the low-level cache.  Cache can now be
+            flushed and set externally using a special packet.  Roving block
+            pointer is reset on diskchanges and formats.
+       0.51 The Mask mountlist option now works.  The filesystem will use one
+            of its internal buffers (allocated with the flags specified by
+            BufMemType) if the transfer cannot be done directly.
+       0.52 Added hashing code for faster management of the low-level cache.
+            Fixed a small bug which sometimes caused a file's date to be bumped
+            while it was never modified.
+
+26 Apr 0.53 EXAMINE_ALL's hook function now works correctly.
+
+ 2 May 0.54 Changed the structure of file and directory information slightly to
+            allow for the extra protection bits required for muFS.  Also added
+            version information so the filesystem can identify disks which are
+            in an older format.  Changed the checksum code.
+
+ 5 May 0.55 Removed some unneeeded code which caused an enforcer hit.  Fixed a
+            problem when relabeling a disk (stupid null-terminated BSTR's).
+
+10 May 0.56 VolumeNode now contains the creation date of the disk, not the last
+            modification date.  Transaction buffer is now flushed when it is
+            larger than 32 kB.  fib_DiskKey is now filled with the Node number
+            of an object, instead of leaving it untouched.
+       0.57 Added code to handle disk changes.
+
+11 May 0.58 Added packets ACTION_SERIALIZE_DISK, ACTION_GET_DISK_FSSM and
+            ACTION_FREE_DISK_FSSM.
+       0.59 Fixed a bug when overwriting and at the same time extending a file.
+            ID_NOT_REALLY_DOS is now returned when a disk isn't SFS, but does
+            have a readable bootblock.
+
+19 May 0.60 Fixed a stack problem.  The stack was 600 bytes when mounted on
+            certain partitions which is a bit too small.  SFS now checks the
+            stack and sets it larger when it isn't large enough.
+       0.61 SFS thought partitions to be 2 tracks smaller then they really
+            were.  This caused problems when the disk gets full.  Fixed.
+       0.62 Fixed a problem where there wasn't enough free space reserved to
+            write out the last transaction.
+
+22 May 0.63 Small bug fixed in the cache system.
+
+23 May 0.64 SFS was checking write protection status for every packet it got.
+            This was incorrect and caused a huge slow down for scsi.device.
+
+25 May 0.65 Removed the 'Not a DOS disk' requester which will annoy you when
+            you haven't formatted the SFS partition yet.
+
+31 May 0.66 Altered the structure slightly again, before the first public
+            release.  This was needed to make it easier later on to add
+            automatic resizing of SFS partitions.
+       0.67 Restructured the source code and fixed a lot of loose ends.
+
+11 Jun 0.68 FIX: Indirect Write transfers weren't functioning correctly at all.
+            This caused trash to be written to a file, instead of the actual
+            data.  The bug would only occur when a direct transfer to memory
+            wasn't allowed by the Mask setting.
+
+13 Jun 0.69 FIX: You can no longer use MODE_FINDUPDATE to open a directory as
+            if it was a file.
+       0.70 NEW: Soft links are now supported.  When using Makelink, make sure
+            you specify a full path.  Hard links are still not supported.
+
+14 Jun 0.71 NEW: There is now a sfsformat command to format a SFS disk with
+            case sensitive names.  You can't switch from case sensitive to case
+            insensitive names without re-formatting the disk.
+
+16 Jun 0.72 FIX: Creating files larger than 32 MB using SetFileSize()
+            (ShapeShifter does this for example) now works correctly.
+
+20 Jun 0.73 FIX: Made reading directories a bit safer.  There are numerous
+            problems with Examine()/ExNext() calls and most of them should be
+            fixed now.
+
+21 Jun 0.74 FIX: The filesystem sometimes checked for disk changes twice at
+            startup due to an unitialized variable.
+
+27 Jun 0.75 FIX: The SetFileSize() bug wasn't completely fixed in version 0.72.
+            This routine has been rewritten completely and now works as it
+            should.
+
+ 2 Jul 0.76 FIX: Write protection status is now checked each time when a disk
+            is inserted.
+       0.77 Improved the error messages SFS produces when the device doesn't
+            respond or reports some other kind of failure.
+
+12 Jul 0.78 NEW: Added a copyback mode in the internal caching system.  This
+            speeds up small writes.
+
+16 Jul 0.79 Parts of a path and the object name are now silently truncated to
+            100 characters (like FFS does for 30 characters).
+       0.80 ACTION_CREATE_DIR no longer deletes a file of the same name if it
+            existed.
+
+30 Jul 0.81 FIX: The filesystem now returns 'object name invalid' instead of
+            'object not found' when you try to create a file or directory with
+            an empty name.
+
+ 2 Aug 0.82 FIX: The filesystem no longer gets confused by diskchange messages
+            when a disk inserted message is send twice.
+       0.83 After writing data to a disk the maximum time allowed before those
+            changes are commited is now 20 seconds, even if the disk is still
+            being accessed.  Earlier versions waited until the Transaction
+            buffer was atleast 32 kB (which could take VERY long) or there was
+            no disk activity for 2 secs (which doesn't occur when you're
+            steadily downloading some data).
+       0.84 SFS now sends disk inserted and disk removed message so requesters
+            which wait for a disk change are now automatically retried.
+
+ 6 Aug 0.85 FIX: There was a bug in the copyback system which sometimes could
+            lead to data being read from the disk while dirty data for that
+            area wasn't flushed yet.
+
+13 Aug 0.86 FIX: There were some older bugs in the cache system which never
+            caused any problems before, but did cause problems with the
+            copyback system introduced in 0.78.  Performance of the cache
+            should now be better than before.
+
+ 4 Sep 0.87 Added ACTION_SET_OWNER packet.
+
+20 Sep 0.88 The number of free blocks is now stored in the root.  The number of
+            free blocks is still being calculated using the Bitmap at mounting
+            time (for compatibility) but this will be removed a future version.
+
+27 Sep 0.89 FIX: The Archive bit of some random file sometimes got clearead
+            when deleting a file in the same directory.  Instead the Archive
+            bit of the directory itself should have been cleared, but it never
+            was.
+
+ 2 Oct 0.90 FIX: When the fileptr wasn't in the last fragment of a file and it
+            was extended with SetFileSize() the file contents would be
+            destroyed.
+
+ 3 Oct 0.91 Sped up reading of small amounts of data (this improves the speed
+            of buffered I/O).
+
+       0.92 Writing a small amount to an existing part of the file could leave
+            a CacheBuffer which could later be used for reading a small amount.
+            However in the mean-time a large write might have altered that part
+            of the cache.
+
+10 Oct 0.93 Implemented a special directory which contains (approximately) the
+            last 30 files which were deleted (".deldir").  Files can be read
+            normally from that directory, and you can move them to their
+            original location if you want to 'undelete' them (copying is also
+            possible).  Deleting files in this directory permanently removes
+            the files.  Comment, date & protection bits will be preserved.  The
+            name may have been altered slightly if it wasn't unique.
+
+17 Oct 1.0  Set version to 1.0 to be compatible with ReOrg (ReOrg hangs the
+            machine when there is a SFS filesystem which has a 0.x version).
+
+       1.1  The 20 second flush time-out has been re-enabled (it was accidently
+            disabled in 0.93).
+
+20 Oct 1.2  FIX: When using case-sensitive names the deldir was still processed
+            as a case-insensitive name.  This resulted in a few small bugs when
+            accessing the deldir.
+
+       1.3  FIX: Fixed a very rare problem with case-sensitive names where the
+            filesystem could accidently use an object with the same name but
+            with a different case.
+
+22 Oct 1.4  FIX: SFS now allows programs to create files in exclusively locked
+            directories (like FFS does).
+
+25 Oct 1.5  FIX: Fixed a bug in ACTION_CHANGE_MODE.
+
+28 Oct 1.6  FIX: An implicit delete (when overwriting a file for example) can
+            now no longer cause a notification message to be sent.
+
+29 Oct 1.7  Writing of small amounts should be slightly faster now thanks to
+            writebytes() function.  Caches protection-bits in global handle.
+
+       1.8  Objects with the special Hidden bit set will now no longer appear
+            in directory listings ('.deldir' has Hidden bit set).
+
+ 1 Nov 1.9  FIX: There was a slight chance SFS could accidently return a soft-
+            link if one was encountered while looking for another object.
+
+       1.10 Made some modifications to speed up the deleting files when there
+            is a .deldir.  Some of these modifications will also slightly
+            improve the speed of other operations like file creation and
+            renaming.
+
+ 4 Nov 1.11 FIX: SFS could hang the system during booting under very specific
+            circumstances.  This might fix the booting problems with some
+            harddisk controllers.
+
+ 7 Nov 1.12 FIX: Since version 1.10 SFS could use the wrong directory if their
+            names had the same length and were located in the same directory
+            block on disk.
+
+ 9 Nov 1.13 FIX: Fixed bug which caused SFS to run out of buffers.
+
+12 Nov 1.14 Removed the need for a parent block pointer in the Node blocks.
+            This is the first step to make it possible to keep the Root of
+            the NodeContainers constant.
+
+14 Nov 1.15 The read-ahead cache now uses buffers aligned to 16-byte
+            boundaries.  This should increase performance slightly on 68040
+            and 68060 systems.
+
+15 Nov 1.16 Changed the block structure as to make it possible to have a fixed
+            root location for the ObjectNode tree.  This should save some CPU
+            time.
+
+18 Nov 1.17 The first ExtentBNode in a chain now has an ObjectNode number to
+            identify the file the chain belongs to.
+
+ 8 Dec 1.18 Changed the default name of the dir where the deleted files are
+            stored to '.recycled'.  It is now referred to as the Recycled
+            directory in all the documentation.  Renaming the Recycled
+            directory is of course still possible.
+
+11 Dec 1.19 FIX: Deleting Soft-links when the Recycling feature is enabled now
+            works correctly.  Previously SFS would free a piece of disk space
+            which is still being used by a file.
+
+22 Dec 1.20 Seperated the layer which communicates with the device.  This
+            makes it easier to use the same layer to write support tools for
+            the filesystem.  Also seperated the caching system into a layer
+            which is built on top of the device layer.  This enables the
+            support tools to make use of caching as well.
+
+23 Dec 1.21 SFS now uses the amiga.lib's Memory Pool functions.  This should
+            mean that SFS now also works under V37.
+
+26 Dec 1.22 FIX: Truncating a file (using SetFileSize()) to non-zero which had
+            multiple extents could easily result in damaged and incorrectly
+            updated extents.  This bug has been present for a very long time.
+
+27 Dec 1.23 Added support functions for moving extents (and their data).  This
+            is the first step toward a file and free-space defragmenter.
+
+13 Jan 1.24 ACTION_INHIBIT will now inhibit the disk when it is passed a value
+            other than DOSFALSE, instead of only when it is passed DOSTRUE.
+            This fixes problems with some versions of DMS.
+
+21 Jan 1.25 There is no seperate SCSI direct version of SFS anymore.  SCSI
+            direct will be used automatically when no NSD 64-bit or TD64
+            support is found (SCSI direct users: please let me know if this
+            works correctly for you).
+
+22 Jan 1.26 Added a new packet which allows you to query a lot of interesting
+            parameters of SFS, including for example whether SFS is using NSD,
+            TD64 or SCSI direct code.
+
+23 Jan 1.27 FIX: Moving a file from the Recycled directory to the same disk
+            would not lower the file counter which keeps track of how many
+            files are in the Recycled directory.  This can lead to files being
+            removed from the Recycled directory too early.
+
+       1.28 The contents of the Recycled directory are not considered anymore
+            when calculating the free space.
+
+       1.29 FIX: Overwriting empty directories by a file with the same name is
+            no longer allowed.
+
+       1.30 New formatting option to make Recycled directory show up in
+            directory listings.  Normally the Recycled directory is hidden.
+
+       1.31 Added a new packet to lock an object by ObjectNode number.  Also
+            added a packet which can be used to hide/unhide objects.
+
+24 Jan 1.32 Added new packet ACTION_SFS_FORMAT which works with TagLists.
+            This makes it easier to add new format options to SFS.
+
+       1.33 Format will now no longer accept names with colons (':') or
+            slashes ('/') in them.
+
+30 Jan 1.34 SFS will now exit without mounting the partition if there is no
+            NSD(64), TD64 or SCSI direct support available.  It does this only
+            for partitions which require this kind of support to work.
+
+       1.35 Updating the disk should now be slightly faster.
+
+       1.36 ACTION_SFS_QUERY can now also be used to get some statistics of
+            the SFS caching system.
+
+ 1 Feb 1.37 FIX: SFS no longer crashes when a disk is inserted.  (Bug was
+            introduced after 1.13).
+
+       1.38 FIX: Removed an Enforcer hit which occured after formatting.
+
+       1.39 FIX: The amount of space used by the Recycled directory is now
+            correct.  Previously it would be of by 1 block for each file in
+            the Recycled directory.
+
+       1.40 FIX: Restored the old routine to update the disk.  The new routine
+            didn't work correctly which meant SFS's safe-writing feature could
+            malfunction.
+
+ 2 Feb 1.41 SFS no longer writes blocks which have become empty and are no
+            longer referenced.
+
+ 3 Feb 1.42 Now uses TD_GETGEOMETRY to detect the size of the disk.  This means
+            SFS should now work a lot better with DD & HD floppies, MO drives
+            and any other drives which have disks of different sizes.
+
+ 6 Feb 1.43 FIX: Renaming a directory into one of its children now generates
+            an error (Object is in use).
+
+ 7 Feb 1.44 FIX: When a SFS disk is very full, SFS no longer refuses to delete
+            files with a 'Disk is Full' message.
+
+14 Feb 1.45 Fixed a potential problem which was introduced in 1.41.  It was a
+            very rare problem which could lead to corruption of internal
+            buffers which in turn could to a damaged partition.
+
+21 Feb 1.46 Tracked down another nasty bug which could cause the cache to
+            contain modified data which was presumed deleted.
+
+23 Feb 1.47 FIX: Notification did not correctly check the last character of the
+            notification path which could lead to multiple notifications being
+            sent if there were multiple notifications which only differed by
+            their last character.
+
+27 Feb 1.48 It seems some programs assume that ACTION_INHIBITs nest even though
+            this is not a requirement for a filesystem.  SFS now also nests
+            these calls, just like FFS does.
+
+28 Feb 1.49 Like FFS, SFS now doesn't allow drives to be inhibited which still
+            have pending changes.  Also slightly altered the way SFS handles
+            disk insertion and removal.
+
+       1.50 Implemented ACTION_FLUSH.
+
+ 5 Mar 1.51 In some cases, calling SetFileSize() twice on an empty file could
+            lead to a damaged file and loss of free space -- fixed.
+
+11 Mar 1.52 FIX: It was possible to set the read-ahead size to a number which
+            wasn't a power of 2 -- the cache system can't handle that, and it
+            is now no longer allowed (bug introduced after version 1.13).
+
+       1.53 FIX: Changing the size of the read-ahead cache while there were
+            still some pending changes could mean those pending changes were
+            lost -- fixed.
+
+13 Mar 1.54 FIX: Soft-links now work correctly again.
+
+       1.55 FIX: There was a slight possibility that SFS reported that a valid
+            disk was inserted, but did not yet tell Dos the name of the disk.
+
+14 Mar 1.56 Added the defragmenter packet interface.
+
+20 Mar 1.57 FIX: Truncating Extents at the beginning no longer causes extents
+            to get lost in the B-Tree.
+
+21 Mar 1.58 Altered the findspace2 bitmap function to use optimized Assembler
+            code.  Also created a backwards-searching version of this function
+            which is used by the defragmenter.
+
+ 3 Apr 1.59 Transactions are now stored starting from the place where the disk
+            was last modified, instead of always starting from the beginning.
+            This should speed up flushing of a SFS drive.  Bitmap functions
+            have been altered accordingly.
+
+       1.60 When deleting a transaction SFS did not take the new OI_DELETE
+            type operations into account -- these are now correctly ignored
+            and removed.
+
+10 Apr 1.61 The startup-message which the filesystem gets from Dos is now
+            returned *after* SFS has checked the inserted disk.
+
+25 Apr 1.62 Changed the way SFS handles adding/removing Volumes from the
+            DosList completely.  It now tries to add/remove entries from the
+            DosList asynchronously, wherever possible.  This could fix all
+            kinds of problems with specific controllers and should also fix
+            the 'not a dos disk' requesters popping up just after SFS was
+            mounted.
+
+ 1 May 1.63 Fixed a very unlikely bug which would have caused getcachebuffer()
+            to put up a requester if there the only unlocked buffer was the
+            very last buffer checked.  Very unlikely indeed, because it
+            implies all other buffers must have been locked...
+
+1.64:
+
+- LockFile function in Objects.c now checks new bit in ExtFileLock structure
+  to see whether it is a file.
+
+- GetRecycledInfo now only gets called for ACTION_FINDOUTPUT, instead of all
+  FIND#? packets.
+
+- Avoided the call to seek() in ACTION_READ/ACTION_WRITE by replacing these
+  with seekforward() function which is much faster.
+
+- Optimized code in ACTION_READ/ACTION_WRITE.
+
+1.65:
+
+- Replaced lots of single & double LONG changes in blocks with the
+  CHECKSUM_WRITELONG function and the _nochecksum version of storecachebuffer.
+  Also optimized CHECKSUM_WRITELONG in Asm.
+
+- Now only updates the date/archive bit of an object if they have actually
+  changed.
+
+1.66:
+
+- SFS now does asynchronous writes.  When it needs to write 10 blocks + 1
+  byte for example, it will do two async writes instead of two synced writes.
+
+- Added PFS2 'trick', for now...
+
+1.67:
+
+- Optimized even more bitfield functions in ASM.
+
+- The SFS copyback cache has been improved.  The cache won't read a line
+  anymore when a write occurs.  It will delay the read until needed; in
+  a lot of cases the read will never be necessary.  Previously the SFS
+  cache did a read-on-write (like the 040 Copyback does).  Now the read
+  will only occur if needed.
+
+- Fixed a small inconsistency.  If SetFileSize failed internally just
+  after having changed the filesize, the globalhandle could reflect the
+  wrong filesize.
+
+1.68:
+
+- First data block of a file is now kept track of in GlobalHandle.
+
+- Functions which deal with enlarging the Extents of a file no longer
+  will worry about updating the globalhandle or the fileheader -- this
+  is left up to the caller.  Since the caller needs to update this
+  information anyway this avoids unneeded readobject's and updates.
+  writetofile() will benefit most from this change.
+
+1.69:
+
+- Fixed a major bug in findspace2(), which was probably introduced in
+  1.58.  The function would when starting its search near the end of
+  the disk return non-existent blocks as free space.  Luckily a safety
+  check in markspace() prevented serious damage (I think).
+
+- Defragmenter now flushes after every action.
+
+Jun 12 1999 1.70:
+
+- Defragmenter now looks through the Extents in search for start
+  Extents, instead of finding the start for all the Extents.
+
+- Searching for extends has been limited for speed reasons.
+
+Jun 20 1999 1.71:
+
+- Added code which should prevent fragmentation from occuring by
+  using the roving block pointer.
+
+  Extending extent		  -> Roving block ptr unmodified
+  New space for new extent	  -> Roving block ptr set to X after new space, unless new space was larger than Y.
+  Close file which was extended -> Roving block ptr set to last block +1. **
+
+Jun 26 1999 1.72:
+
+- Added code which estimates the size of the AdminSpaces needed when
+  the disk is filled.  The roving block pointer is set to start after
+  this 'reserved' space, allowing SFS to allocate AdminSpaces at the
+  beginning of the disk for the most part.
+
+Jun 26 1999 1.73:
+
+- Added new ACTION_SFS_SET packet which allows you to set some
+  parameters of SFS (until reboot for now).  See packets.h for
+  details.
+
+Jun 27 1999 1.74:
+
+- Defragmenter should now finally be safe to use while other programs
+  are accessing files.  The Defragmenter will look for filehandles with
+  a file pointer in the area which the Defragmenter is moving.  If one
+  is found it is marked 'invalid', forcing any further accesses to that
+  file to first find the correct position of the file on disk.
+
+Jul  4 1999 1.75:
+
+- Defragmenter now tries to leave defragmented areas alone when moving
+  data.  It also is able to pick 2 fragments to fill a hole (so an exact
+  match becomes less important).
+
+Jul  4 1999 1.76:
+
+- The initial dos packet is replied a bit earlier again... and a bit
+  later again (Sep 19 1999).
+
+Jul 17 1999 1.77:
+
+- Stackswap function now checks exec version.  This avoids SFS crashing
+  under 1.3.
+
+Sep 19 1999 1.78:
+
+- Work-around for bug in ixemul with Soft Links added.  ACTION_READ_LINK
+  now copies the passed in path, before writing to the Soft Link buffer.
+
+- Changed directory scanning order slightly.  This should reduce problems
+  even further with tools which modify entries in a directory while
+  scanning.
+
+Oct  2 1999 1.79:
+
+- Changed Defragmenter to scan for fragments from the end of the disk,
+  instead of from the current point of defragmentation.
+
+Oct  3 1999 1.80:
+
+- findspace2_backwards() didn't correctly check if the space returned
+  was within the requested bounds -- fixed.  Also, findspace2() has
+  also been slightly altered.
+
+- ASQ_VERSION can now be used to determine the version of the filesystem.
+
+Oct  6 1999 1.81:
+
+- Fixed bug introduced in 1.80 which caused the Defragmenter to move
+  more data after the defragmentation should have been finished.
+
+- Optimized Defragmenter's CPU usage a bit.  CPU usage should now have
+  gone down considerably.  The previousbnode function did not optimize
+  for the case where the passed in BTree block already contained the
+  wanted previous BNode.
+
+Oct  9 1999 1.82:
+
+- Fixed Enforcer hit in findspace_backwards.  Unsigned problem of
+  localbreakpoint.
+
+Oct 11 1999 1.83:
+
+- Defragmenter will now move multiple fragments into an empty space if
+  all the fragments belong to the same file.  This helps to speed up
+  defragmenting of very fragmented files.
+
+Oct 30 1999 1.84:
+
+- When an error occurs during a read or write to the disk, SFS will now
+  automatically retry the operation a few times before reporting an
+  error.
+
+
+..filename length limit
+..fix too-many requesters
+..switch for startup-reqs?
+..settable 20 second time-out
+
+ 1.52 FIX: One field was uninitialized for newly allocated read-ahead
+            cache buffers.  This could cause memory trashing and data
+            corruption.  Bug probably introduced in version 1.20.
+
+
+1999
+
+(Did some work remoddeling requester to not use
+DosEnvec/DevNode -- saved 800 bytes).
+
+- Multi level transactions.       Sep 12 1998
+- Free blocks are kept track of.  Sep 20 1998
+- Undelete support.
+- Archive bit of some random file sometimes got cleared when deleting a file in
+  the same directory.  Instead the archive bit of the directory itself should
+  have been cleared, but it never was.   Sep 27 1998
+- When the fileptr wasn't in the last fragment of a file and it was extended
+  with SetFileSize the file contents would be destroyed.  Oct 2 1998
+- Sped up reading of small amounts by copying directly from IOCache instead
+  of a CacheBuffer.  Oct 3 1998
+- Writing a small amount to an existing part of the file could leave a
+  CacheBuffer which could later be used for reading a small amount.  However
+  in the mean-time a large write might have altered that part of the cache.
+  Oct 3 1998
+
+
+-------------------------------------------------------------------------------|
+                                                                               |
+SFSdefragmentGUI                                                               |
+                                                                               |
+date   version                                                                 |
+-------------------------------------------------------------------------------|
+ 3 Oct 1.1  Fixed a bug in SetCache which could cause a crash.
+
+
+-------------------------------------------------------------------------------|
+                                                                               |
+SetCache                                                                       |
+                                                                               |
+date   version                                                                 |
+-------------------------------------------------------------------------------|
+22 Jan 1.0  Cleaned up SetCache.  It now displays the new settings of the
+            cache.
+
+ 3 Oct 1.0  Fixed a bug in SetCache which could cause a crash.
+
+
+-------------------------------------------------------------------------------|
+                                                                               |
+SFSformat                                                                      |
+                                                                               |
+date   version                                                                 |
+-------------------------------------------------------------------------------|
+24 Jan 1.0  Cleaned up SFSformat.  It now has a version string and has a new
+            switch SHOWRECYCLED.
+
+ 3 Oct 1.1  Fixed a bug in SFSformat which could cause a crash.
+
+-------------------------------------------------------------------------------|
+                                                                               |
+SFScheck                                                                       |
+                                                                               |
+date   version                                                                 |
+-------------------------------------------------------------------------------|
+20 Jan 1.0  SFScheck now makes use of the device I/O and cached I/O layers.
+
+10 Feb 1.1  FIX: Forgot to recompile SFScheck without requesters.
+
+       1.2  Added a LOCK switch to SFScheck.  This prevents the disk from
+            getting modified during scanning.
+
+25 Apr 1.3  Added options to set the number of lines and the readahead size
+            SFScheck uses.  Using large values here can reduce the time
+            SFScheck takes considerably.
+
+Finished list
+=============
+
+---|---|---|--------------------------------------------------------------|
+Pri EsH Hrs
+---|---|---|--------------------------------------------------------------|
+ H   1  0.5 Clearing the archive bit when a file has been modified.
+
+ H   1  0.5 Updating date of parent directory.
+
+ H   1  1.5 Support for relabel (ACTION_RENAME_DISK).
+
+ H   4+ 8.0 Safe flushing.
+
+ N   2  1.5 64-bit support.
+
+ H   1  0.5 Flush timeout should only be triggered for physical disk
+            accesses or when blocks in the cache were modified.  This is
+            getting more important because the Workbench will send packets
+            every 5 seconds, which could prevent flushing to occur!
+
+ N   4  4.5 Use of balanced binary tree for internal transaction
+            structures to speed things up (linked list is used currently).
+
+ N   8  0.5 For flushoperations, a block-sorting function to flush blocks
+            in block order.
+
+ H   2  3.5 Fix implementation of ACTION_SET_FILE_SIZE.
+
+ N   4  2.0 Notification code completed.
+
+ N   4  4.0 ACTION_EXAMINE_ALL.
+
+ H   2  0.5 Respect Mask mountlist option.
+
+ H   1  0.5 Limited maximum Transaction size to a reasonable value.
+
+ N   1  1.5 Case insensitive option.
+
+Pri = Priority
+EsH = Estimated Hours
+Hrs = Hours
+
+
+
+To do list
+==========
+
+---|---|--------------------------------------------------------------|
+Pri EsH
+---|---|--------------------------------------------------------------|
+ H   ?  Make sure that freeing an adminspace area cannot get
+        overwritten by data or a new adminspace container in the same
+        Transaction (currently this cannot occur as adminspace areas
+        are not freed).
+
+ N   4  Only compress cachebuffer when cachebuffer needs to be reused.
+        The performance gain could be quite incredible when this is
+        implemented as usually buffers are compressed about 10-100x
+        more often than uncompressed.
+
+ N  40+ Disk optimizer.
+
+ L   4  Node system doesn't really need the Parent pointers in their
+        blocks.  Removing them will give extra room in the Node
+        blocks, but will also make moving Node blocks easier.
+        [Note: The old node system is likely to be removed completely
+        in favor of the new B+-Tree system]
+
+ L   8+ Using a binary tree to link objects in a hash-chain together
+        instead of a singly linked list.  This will speed up the
+        search time for an object by name in extremely large
+        directories (>5000 objects).
+
+ L   8+ Extending partition on the fly support (may need built-in
+        disk optimizer).
+
+ L  16+ Multiple HD support (requires special device driver).
+
+ L  16+ Links.
+
+
+
+known bugs:
+
+- Doesn't pay attention to disk changes.  C/DiskChange might help here, but
+  disk changes are not fully supported yet (so be careful!).
+
+- Doesn't pay attention to write-protection (the filesystem will get
+  confused eventually if you've write protected the disk and start writing
+  data to it).
+
+- Not all space gets freed again if you delete all files from a disk.  This
+  is caused by the fact that the filesystem allocates parts of the disk to
+  store its administration blocks on demand.  These areas aren't freed again
+  (but they are reused if needed!).  This will be fixed eventually, but is no
+  more than a minor inconvience at the moment.
+
+- resizing partition doesn't make it invalid if start-block remains same.  We
+  should check for this!
+
+- Insert a disk, cd to disk, remove disk, cd to SYS:.  The locklist will now
+  be non-zero the just removed disk, but the last lock (ie, when you cd-ed
+  to the disk) will be freed... locklist probably points to dealloced memory..
+  FFS: FFS seems to kill the volumenode completely when the last lock is freed.
+  -> I tried to fix this problem, but it seems impossible.  When deallocating
+     a lock which is not currently owned by a handler there are all sorts of
+     race conditions.
+
+
+unimplemented packets:
+
+ACTION_LOCK_RECORD
+ACTION_FREE_RECORD
+ACTION_MAKE_LINK (soft links only at the moment)
+ACTION_WRITE_PROTECT
+ACTION_EXAMINE_ALL_END
+
+
+interesting stuff:
+
+- Keep things sorted (like FFS hash chain) -- might improve speed.
+
+- Small files (less than blocksize) can be accessed directly without
+  going through the B-Tree, since the file-header contains a pointer
+  to the first block.  Also, we might be able to keep additional
+  information in the fileheader, as any changes to the Extents will
+  most likely also result in a change in the file header...
+
+- Extent chains MUST have a pointer back to the fileheader -- otherwise
+  the optimization process cannot update the data pointer in the fileheader!
+
+- Nodes still use shifts_block32 and mask_block32...
+
+- ./.. laten werken.
+
+- DISK_INSERTED IDCMP verzenden.
+
+
+Tests
+=====
+
+- Check if you can correctly extend a file which has the same last block
+  as the partition.  SmartFindAndMarkSpace() will then get passed a block
+  which is 1 beyond the end of the disk by Extendfile().
+- Test dos.library function OpenFromLock().
+- Test dos.library function ParentOfFH().
+- Test dos.library function DupLockFromFH().
+- Test dos.library function ChangeMode().
+- Test how the filesystem handles long file and directory names (limit should
+  be 100 characters) and long paths (limit should be 255 characters).  The
+  filesystem should never crash in any case.
+- anything you can think of :-)
+
+
+
+
+
+> I have noticed one thing that is not really a bug, but a behaviour that is
+> different to the FFS:
+> I turn the motor of my UW SCSI HD (CS PPC SCSI) off with p5's unitcontrol
+> program. Now when I try to acces a file on the HD a window pops up:
+
+> cybppc.device
+> returned an error while volume DH4 was accessing it.
+> errorcode = 45
+> io_Command = 2
+> io_Offset = 81558528
+> io_Length = 4096
+> ioi_Actual = 0
+
+> This error req is of course not bad, but the FFS gives the possibility to
+> retry the operation, so I can just re-activate the HD and retry.
+
+
+TO-DO before next release:
+--------------------------
+
+** Deldir should be optional.
+** Deldir name should be user-settable (renaming will work).
+** Reserve ObjectNode 2 for deldir or maybe some other pointer in rootblock (settable with command).
+-- Improve 'duplicate' naming strategy in deldir.
+** Check & recheck that comment, rename/move, protection & delete actions work correctly on deldir.
+** Deldir should delete files in fifo order instead of random order.
+** Moving/Creating directories in the deldir ... deldir gets confused atm.
+** What happens if deldir gets deleted?
+** Tests (massextract, YAM, IBrowse, LhA)
+*- Cleaning algorithm for deldir (based on Age, number of files and size of files).
+-- Were there any structural changes?  Do they interfere with old disks? -> freeblocks count...
+
+optional:
+
+*- Speed tests + alter way deldir stores its data.  Also locating deldir should be fast.
+-> Change allocation strategy to avoid fragmentation.
+ - Remove unnecessary reads in ACTION_WRITE.
+ - Check problems with harddisks wich are turned off using MCP.
+** Show real space free when deldir is enabled.
+ - Settable limit on filename length.
+ - Tool to hide/unhide files.
+ - Speed up deldir (no hashing for example).
+*- LONGWORD compression.
+ - No compression.
+ - Reduce CPU usage.
+ - Don't allow files in .deldir to be extended/truncated.
+
+** SetCache should accept devices names with colon
+ - Store SetCache information
+ - Shareable caches?
+** Hide/unhide deldir
+** Query cache size (query misc information)
+ - Fragmentation report
+ - Update SFScheck (old version in archive!)
+ - Extend SFSformat (check parameter requirements).  Possible add full format.
+
+$VER for all programs!
+
+- add timeout to crash requesters -> difficult.
+
+** handleiding aanpassen en zeggen dat AFS niet meer ondersteund wordt en niet
+   meer verkocht wordt.
+
+** BPTR link in locklist kunnen we wel 'goed' instellen.
+
+
+>> disk, but just keep quiet :-)  Which requester do you get?
+
+> Not enough sectors found.
+> The disc is in an unreadable format.
+> error code = 21
+> io command = 2
+
+That's a strange requester indeed, but I can understand why
+it appears.  Floppy.device uses more sectors than normal FFS
+disks, and so when SFS tries to read the FFS disk using
+floppy.device, then it returns the error above.
+
+
+** Overwriting empty directories by a file is possible!!  --> FIX this!
+
+- notification nog niet correct?
+
+- SCSI direct seems to work in V40 scsi.device
+
+- oktagon.device 2.19 seems to support scsi direct as well.
+
+** Investigate # of deleted files in .deldir problem...
+
+** ACTION_FORMAT should return Illegal object name if ':' or '/' are included.
+
+> P.S.: While doing the backup I discover, that Diavolo (v3.4 Pro) doesn't
+> recognize SFSs dir-softlinks (FFS/AFS are okay).  -> fixed??
+
+
+
+> Also, a possible filesystem bug. I CDed to SFS640:, and ran Diskspeed ALL.
+> I then pressed ctrl-C to abort. It finally quit after creating all the
+> files in _test_directory_.
+
+> Immediately after this, I typed:
+>> List
+> The result was:
+>  No information for "": object is in use
+
+> Typing:
+>> Dir
+> Resulted in:
+>  Could not get information for
+>  object is in use
+
+> This looks like a bug. Directory Opus 4.12 would read the disk's root
+> directory, but not the _test_directory_; it said DOS error code 202 -
+> Object is in use. Should SFS allow directories to be locked like this?
+I've
+> never come across this behaviour under FFS.
+
+
+
+
+> Danach neubooten, ZIP-disk war RAUSGEZOGEN, zip-disk REIN -> 800..008 guru.
+> Immer wieder.
+
+> Ich habe dann nochmal mit rausgezogener zip-disk gebootet und die Disk
+> erst spaeter reingeschioben. Jetzt gabs es die Meldung von not supportetd
+> version es stuerzte aber nichts ab und ich konnte die zip-disk formatieren.
+
+> Du der Fehler laeuft 'andersrum'. Wenn ich OHNE die zip-disk
+> gebootet habe und sie spaeter reinschob, gabs GURU.
+> War sie schon beim Booten drin, gab es keinen GURU, nur der 'not
+> supported' req.
+
+
+
+
+Hello Mark
+
+On 16-Feb-99, Mark wrote:
+> On 12-Feb-99, John Hendrikx wrote:
+>> >>  I noticed another minor problem too. The Device and Unit tooltypes of
+>> >>  my SFS640 mount file were accidentally set to a non-existent device
+>> >>  (scsi.device instead of gvpscsi.device). Mounting SFS640: did not
+>> >>  bring up an error, and after this the Copy and Info commands hung.
+>> >>  (The computer did not crash, the commands just seemed to "get stuck",
+>> >>  never exiting.)
+
+>>  I don't know if this is normal behaviour. SFS exits if it can't open the
+>>  device, so it probably never even got mounted. Mount should have
+>>  displayed an error though... did you test this with FFS as well?
+
+> Yes. With FFS, Info does not show the device name and does not hang.
+
+
+> Just a quick note to let you know that I have written and uploaded a script
+> to Aminet which automates the SFScheck program within the startup-sequence,
+> and reports errors via a secondary script generated in WBStartup. I don't
+> plan to update the script any, so if you like, you can include it in the
+> SFS release, or alternatively mention it in the docs.
+
+> The archive is located at util/batch/TestSFShd.lha
+
+
+
+To increase speed:
+==================
+
+- Allocate Nodes using a cyclic system
+
+- Allocate AdminSpace blocks using a cyclic system
+
+- Use larger AdminSpaces
+
+- Better allocation scheme for file blocks
+
+- Think about speeding repetitive deletes (".article")
+
+- Prevent reading of data on single block writes (when
+  copyback mode is on)
+
+- Save operations close to each other (currently it uses
+  the first free block it can find, filling up a lot of
+  holes -- a cyclic system might help a lot already).
+
+- Defragmenter
+
+
+
+Result of defragmentation step
+==============================
+
+A list with one or more of the following:
+
+- Moved x blocks from y to z
+
+
+
+
+> I found a "bug" in SFS ! Dunno if you can fix it...it occurs at least in
+> version 1.46 of SFS.
+> Just go on a partition (I made it with my bootpartition) and leave the
+> current directory on it. Now send an ACTION_SFS_FORMAT packet to the
+> device the partition is aquivalent to and then try to dir it.
+> Two requesters shall now pop up in serie with (I dunno the exact text)
+> "Drive ... tried to read data beyond its size" (I really should have note
+> it down...) and then after this the normal insert volume ... in drive ...
+> appears. I think you should somehow remove the 2 requesters and DOS should
+> just pop up the insert ... one.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Extending extent		Roving block ptr unmodified **
+New space for new extent	Roving block ptr set to X after new space, unless new space was larger than Y.  **
+First space in file		Roving block ptr set to X after new space, unless new space was larger than Y.  **
+Close file which was extended	Roving block ptr set to last block +1. **
+
+10.000 files is about 2.000 blocks of adminspace.
+
+500 MB -> 25.000 files = 5.000 blocks = 2.5 MB
+
+
+   125 MB ->  1.25 MB (1% = MAX)
+   500 MB ->  2.50 MB
+  2000 MB ->  5.00 MB
+  8000 MB -> 10.00 MB
+
+Formula:
+--------
+ total megabytes ^ 0.25
+
+  125 / 100
+  500 / 200
+ 2000 / 400
+ 8000 / 800
+
+ 1 ->  1   1.25
+ 4 ->  2   2.5
+16 ->  4   5
+64 ->  8  10
+
+Rules:
+------
+
+Minimum = 32 blocks unless there aren't that many blocks.
+Maximum percentage of disk = 1%
+Always a multiple of 32 blocks (??)
+
+
+blocks512=blocks_total<<(shifts_block-9);
+reserve=SQRT(blocks512);
+reserve=(reserve<<2) + reserve;
+
+if(reserve > blocks512/100) {      // Do not use more than 1% of the disk.
+  reserve = blocks512/100;
+}
+
+if(reserve < 32) {                 // Use atleast 32 blocks, even if it is more than 1%.
+  reserve = 32;
+  if(reserve > blocks_total>>1) {
+    reserve = 0;
+  }
+}
+
+
+ 256000 ->  2560    505.96
+1024000 ->  5120   1011.92
+4096000 -> 10240   2023.86
+
+
+
+
+  ------ |----| ------	move
+  ------ |----| -----|	move
+  ------ |----| |-----	don't move
+  ------ |----| |----|	don't move
+
+  -----| |----| ------	move
+  -----| |----| -----|	move
+  -----| |----| |-----	don't move
+  -----| |----| |----|	don't move
+
+  |----- |----| ------	move
+  |----- |----| -----|	move
+  |----- |----| |-----	move
+  |----- |----| |----|	move
+
+  |----| |----| ------	don't move
+  |----| |----| -----|	don't move
+  |----| |----| |-----	don't move
+  |----| |----| |----|	don't move
+
+
+  ------ |----- ------	move
+  ------ |----- -----|	move
+  ------ |----- |-----	move
+  ------ |----- |----|	move
+
+  -----| |----- ------	move
+  -----| |----- -----|	move
+  -----| |----- |-----	move
+  -----| |----- |----|	move
+
+  |----- |----- ------	move
+  |----- |----- -----|	move
+  |----- |----- |-----	move
+  |----- |----- |----|	move
+
+  |----| |----- ------	don't move
+  |----| |----- -----|	don't move
+  |----| |----- |-----	don't move
+  |----| |----- |----|	don't move
+
+
+
+  |----x ------ |----x	preferably move
+  |----  ------
+
+
+
+
+Lookup types:
+------------
+From object to parent
+From object to first file data
+From parent to object (by name)
+From parent to object (dir scan)
+
+
+Key-part       Bits   Motivation
+-------------------------------------------------------------------------------------------------------------------
+<object-id>     32    Object-id's are unique for the entire life of the filesystem.  If a file was generated every
+                      1/100 of a second, this number of bits would allow for a life-span of 1.5 years.
+
+<seq-nr>        20    A file of 4 GB should be possible if constructed out of 4 kB parts.
+
+<hash-value>    16
+
+
+
+Class      Key                         Fields
+-------------------------------------------------------------------------------------------------------------------
+Extent     <object-id> <extent> <seq>  Startblock, count
+
+
+
+Type        Key                                      Unique? Contents
+-------------------------------------------------------------------------------------------------------------------
+Object      <parent-id> <object> <object-id>            Yes  Name, Size, Attributes, Parent-ID?, Data-ID
+HashEntry   <parent-id> <hash>   <hash-value>            No  <object-id>
+Extent      <object-id> <extent> <sequence-number>      Yes  Startblock, Blockcount
+Tail/Data   <object-id> <tail>                          Yes  <unformatted>
+-------------------------------------------------------------------------------------------------------------------
+Directory entries of a directory are packed together in order of creation.
+Directory hash-values of a directory are packed together in order of value.
+Directory entries and directory hash-values are packed together.
+Extents of an object are packed together in order of sequence-number.
+Extents of an object is packed together with the tail.
++ Hash-values are successive entries in the tree -> suiteable for searching.
++ Extents are in order of sequence-number -> quick seeks.
++ Directory entries are packed together -> fast directory scans.
+
+             Object-Info + Directory-entries
+                 / \                 / \
+          Extents   Tail      Objects   Hash-values
+
+
+            Directory-entries
+            /    |     |    \
+      Extents  Hash  Object  Tail
+
+HashEntries           near to       Parent object
+
+
+Case "Hash entries <parent-id> <hash> <hash-value>"
+---------------------------------------------------
+
+---- O BOOT
+
+BOOT H hash-values
+
+BOOT O <..>
+BOOT O Work
+BOOT O <..>
+
+Work H hash-values
+
+Work O <..>
+Work O Fs
+Work O <..>
+
+Fs   H hash-values
+
+To reach any object in the directory BOOT:Work/fs you'll
+need to read 4 objects (BOOT, WORK, fs and the requested
+object).  You'll also need to read 3 hash-entries (the one
+for WORK, fs and the requested object).  If hash-entries are
+not stored close to their directory this will result in 7
+physical reads.
+
+SFS probably has approximately the same amount of reads
+at this time.
+
+
+Case "Hash entries <parent-id> <object-id> <hash> <hash-value>"
+---------------------------------------------------------------
+
+---- BOOT H hash-values
+---- BOOT O
+
+BOOT <..> O
+BOOT Work H hash-values
+BOOT Work O
+BOOT <..> O
+
+Work <..> O
+Work Fs   H hash-values
+Work Fs   O
+Work <..> O
+
+To reach any object in the directory BOOT:Work/fs you'll
+need to read 4 objects (BOOT, WORK, fs and the requested
+object).  You'll also need to read 3 hash-entries (the one
+for WORK, fs and the requested object).  Since hash-entries
+are stored close to their directory this will probably
+result in about 4 physical reads.
+
+However:  Reading directories with lots of directories in
+them will be slowed down, especially if these directories
+are fairly large.  Each hash-node in the tree will probably
+be around 20 bytes in size.  Assuming 4 kB blocks this means
+there will be only one directory entry per block if that
+entry has more than 200 objects in it.
+
+
+
+About blocksizes
+----------------
+
+16 kB tree blocks
+ 4 kB data blocks
+
++/- 100 bytes tree overhead per 16 kB block (16284 bytes/treeblock)
+
+Limit at   Tree               Data block
+ X bytes   overhead (wc)      overhead (wc)         Tails                    Avg. overhead
+--------------------------------------------------------------------------------------------------------
+   2500    2499 / 6 = 417     4096 - 2500 = 1596    (61% * 417 + 39% * 1596)/2 = 438
+   3000    2999 / 5 = 600     4096 - 3000 = 1096    (73% * 600 + 27% * 1096)/2 = 367
+>> 3250    3249 / 5 = 650     4096 - 3250 =  846    (79% * 650 + 21% *  846)/2 = 346 <<
+   3300    3299 / 4 = 825     4096 - 3300 =  796    (81% * 825 + 19% *  796)/2 = 410
+   3375    3374 / 4 = 844     4096 - 3375 =  721
+   3500    3499 / 4 = 875     4096 - 3500 =  596
+
+
+16 kB tree blocks, with 16248 bytes useable space.
+ 4 kB data blocks.
+
+Tails storing          Outside             Avg.
+ In Tree                 Tree             Waste
+---------------------------------------------------------------------------------------------------------
+  1-3000 (1500)     3001-4096 (3548)     16248/1500 =
+
+
+
+
+
+
+
+
+Tree Structure
+--------------
+
+Header  : <id> <checksum>
+Entries : <key> <information>
+
+
+Key compression
+---------------
+Key's can be very long.  The <parent-id> <object>
+<object-id> is 9 bytes long.  Compressing the keys will make
+sense.  Key's should always be WORD aligned to facilitate
+copying.
+
+The key compression scheme always uses the last key as the
+base key.  The first nibble indicates the number of similair
+bytes in the key (0 to 15), and the 2nd nibble indicates the
+number of bytes added to the base of the key (1-16).
+
+The maximum key-length is limited to 16 bytes because of
+this.  Furthermore, if two keys are completely the same
+(duplicates) then the last byte of the key must still be
+repeated.
+
+-----------------------------------------------------------------------------------------------------------
+ <system>,      directory-id, hash,   hash-value                      Object-id
+
+ <system>,      directory-id, object, object-id                       Name
+ <system>,      directory-id, object, object-id, smalldata            Data
+ <system>,      object-id,    extent, sequence-number                 Extent
+ <system>,      object-id,    tail                                    Data
+
+ <class-index>, class-id                                              Directory-id, Object-id      A global index on class
+ <name-index>,  hash-value                                            Directory-id, Object-id      A global index on name
+
+ <pl-cl-index>, directory-id, class-id                                Object-id                    A parent-local index on class
+ <pl-name-idx>, directory-id, hash-value                              Object-id                    A parent-local index on name
+
+Object      <parent-id> <object> <object-id>            Yes  Name, Size, Attributes, Parent-ID?, Data-ID
+HashEntry   <parent-id> <hash>   <hash-value>            No  <object-id>
+Extent      <object-id> <extent> <sequence-number>      Yes  Startblock, Blockcount
+Tail/Data   <object-id> <tail>                          Yes  <unformatted>
+
+
+------
+
+Transactions loaded from disk don't have correct magic-valu.
+
+parentid + "O" + id                : Name, Size, Attributes, plus the first few Extents or the entire file is small enough.
+parentid + "H" + hash              : id
+parentid + "E" + id + seq-nr       : Extents, kept near the parent-dir.
+parentid + "T" + id                : Tail, kept near the parent-dir.
+
+Typical ordering:
+-----------------
+
+ - Extents of all files in a directory.
+ - The hash entries of a directory.
+ - The objects in the directory.
+ - The tails of the objects in a directory.

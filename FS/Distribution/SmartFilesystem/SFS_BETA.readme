@@ -1,0 +1,237 @@
+Short:    Smart Filesystem V1.58 BETA
+Author:   hjohn@xs4all.nl
+Uploader: hjohn@xs4all.nl
+Type:     disk/misc
+Version:  1.58
+
+------------------------------------------------------------
+
+This filesystem is BETA -- this means it is not finished and
+          may potentially destroy all your data.
+
+                 USE AT YOUR OWN RISK!
+
+ For more information, see http://www.xs4all.nl/~hjohn/SFS
+
+------------------------------------------------------------
+
+
+
+What's new?
+-----------
+
+  28 March 1999, changes for version 1.58:
+
+  - There is an SFSquery tool which displays a bit of information
+    about a SFS drive.  Try it.
+ 
+  - SFS will now refuse to mount a partition if it is (partially)
+    located after 4 GB on the drive and there was no 64-bit support
+    available (NSD(64), TD64 or SCSI direct).  This helps to prevent
+    damage to your data.
+
+  - Changed the way SFS updates the disk -- it should be slightly
+    faster now.
+
+  - The read-ahead cache should now be slightly faster on 68040 and
+    68060 systems by aligning the buffers to 16-byte boundaries.
+
+  - Made some alterations to the structure of some SFS blocks to
+    reduce CPU usage and to make the defragmenter easier to add in a
+    new version.
+
+  - The default name of the directory where the deleted files are
+    stored is now '.recycled'.  It is now referred to as the
+    Recycled directory in all the documentation.  Renaming the
+    Recycled directory is of course still possible.
+
+  - BUGFIX: Deleting Soft-links now works correctly.
+
+  - SFS should now work under Kick 2.04.
+
+  - BUGFIX: Truncating files using SetFileSize() could damage the
+    file truncated under some conditions.
+
+  - In some cases, calling SetFileSize() twice on an empty file could
+    lead to a damaged file and loss of free space -- fixed.
+
+  - BUGFIX: Fixed a small problem with disk changes and DMS.
+
+  - There is no seperate SCSI direct version of SFS anymore.  SCSI
+    direct will be used automatically when no NSD 64-bit or TD64
+    support is found (SCSI direct users: please let me know if this
+    works correctly for you -- use the SFSquery tool to find out if
+    SCSI direct is being used).
+
+  - BUGFIX: Moving a file from the Recycled directory to the same disk
+    would not lower the file counter which keeps track of how many
+    files are in the Recycled directory.  This can lead to files being
+    removed from the Recycled directory too early.
+
+  - The contents of the Recycled directory are not considered anymore
+    when calculating the free space.
+
+  - BUGFIX: Overwriting empty directories by a file with the same name
+    is no longer allowed.
+
+  - SFSformat now has an option to keep the Recycled directory visible
+    if you wish.
+
+  - Format will now no longer accept names with colons (':') or
+    slashes ('/') in them.
+
+  - Updated SFScheck and SetCache.  The source of SFScheck is now also
+    included in the archive.
+
+  - Now uses TD_GETGEOMETRY to detect the size of the disk.  This means
+    SFS should now work a bit better with DD & HD floppies, MO drives
+    and any other drives which have disks of different sizes.
+
+  - BUGFIX: Renaming a directory into one of its children now generates
+    an error (Object is in use).
+
+  - BUGFIX: There was a slight possibility that SFS reported that a
+    valid disk was inserted, but did not yet tell Dos the name of the
+    disk.
+
+  - Implemented ACTION_FLUSH.
+
+  - Like FFS, SFS now doesn't allow drives to be inhibited which still
+    have pending changes.  Also slightly altered the way SFS handles
+    disk insertion and removal.
+
+  - BUGFIX: Notification did not correctly check the last character of
+    the notification path which could lead to multiple notifications
+    being sent if there were multiple notifications which only differed
+    by their last character.
+ 
+  Note: This version is NOT compatible with the previous releases of
+        SFS.  You'll need to reformat existing SFS partitions if you
+        want to use the new features.  It is possible to use the new
+        SFS and the older version at the same time, see the guide or
+        see below.
+
+
+Upgrading from 1.1x
+-------------------
+
+This new version of SFS is not compatible with the SFS
+versions 1.13 or older.  Even though I try to keep SFS
+compatible to older versions as much as I can, this is not
+always an option.  In this case SFS the changes were to
+extensive to keep SFS compatible.  Most of the changes have
+to do with the defragmenter (even though it is not available
+yet) and with reducing CPU usage.  This means that you'll
+have to reformat your SFS partitions to be able to use the
+latest version.
+
+However, it is possible to run two different versions of SFS
+at the same time -- you simply need to treat this new
+version of SFS as a completely new filesystem.  So just like
+FFS can't be directly replaced by a SFS filesystem, this new
+version can't simply replace the old SFS version either.
+
+SFS in the RDB
+--------------
+If you've put the old version of SFS in the RDB then you can
+add the new version there as well.  Don't remove the old
+version until you've converted all of your SFS partitions.
+
+Add the new version, but give it a different DosType.
+Normally you used 0x53465300 (=SFS/0), but give the new
+version a different DosType.  I'd recommend using 0x53465301
+(=SFS/1).  Now you can choose between the old SFS version
+(SFS/0) and the new one (SFS/1) for each of your partitions.
+
+If you changed one of your old SFS partitions to the new
+version, SFS will put up a requester during booting telling
+you that the SFS disk is in a format which is not supported
+anymore.  This is normal.  After formatting the disk it
+should be useable again.  You can use SFSformat or the
+normal Format command with the QUICK option to format the
+disk.
+
+SFS with mountlists
+-------------------
+If you mount your SFS partitions from a mountlist then you
+can also use two versions of SFS at the same time.  Just
+copy the new version of SFS to your L: directory with a
+different name (for example 'SmartFilesystem2').  Now in
+your mountlists you can use the new version of SFS by
+changing the following lines:
+
+ Filesystem = l:SmartFilesystem2
+ DosType = 0x53465301
+
+Also take a look at the Installation section in the guide
+for more details.
+
+
+
+Introduction
+------------
+
+Smart Filesystem is a new filesystem for your Amiga.  A
+filesystem's main purpose is to store files on a disk in
+such a way that they can be located and used quickly.  How
+this is done is up to the filesystem.  The way information
+is stored on your disk has a large impact on speed and space
+efficiency, and so these factors can vary a lot from
+filesystem to filesystem.
+
+Smart Filesystem was created to provide you with an
+alternative to the Fast Fileystem.  Smart Filesystem makes
+more efficient use of your disk space, has better
+performance in most areas and will allow for new features
+never seen before in an Amiga filesystem.
+
+
+
+Features
+--------
+
+ o Fast reading of directories.
+
+ o Fast seeking, even in extremely large files.
+
+ o Blocksizes of 512 bytes up to 32768 bytes (32 kB) are supported.
+
+ o Supports large partitions.  The limit is about 2000 GB, but it can
+   be more depending on the blocksize.
+
+ o Support for partitions larger than 4 GB or located (partially)
+   beyond the 4 GB barrier on your drive.  There is support for the
+   New Style Devices which support 64 bit access, the 64-bit
+   trackdisk commands and SCSI direct.
+
+ o The length of file and directory names can be 100 characters.
+
+ o The size of a file is limited to slightly less than 2 GB.
+
+ o Modifying data on your disk is very safe.  Even if your system is
+   resetted, crashes or suffers from powerloss your disk will not be
+   corrupted and will not require long validation procedures before
+   you will be able to use it again.  In the worst case you will
+   only lose the last few modifications made to the disk.
+
+ o There is a built-in configurable read-ahead cache system which
+   tries to speed up small disk accesses.  This cache has as a
+   primary purpose to speed up directory reading but also works very
+   well to speed up files read by applications which use small 
+   buffers.
+
+ o Disk space is used very efficiently.
+
+ o Supports Notification and Examine All.
+
+ o Supports Soft links (hard links are not supported for now).
+
+ o Using the SFSformat command you can format your SFS partition with
+   case sensitive or case insensitive file and directory names.
+   Default is case insensitive (like FFS).
+
+ o There is a special directory which contains the last few files
+   which were deleted.
+
+For more information, see http://www.xs4all.nl/~hjohn/SFS or read
+the included documentation.

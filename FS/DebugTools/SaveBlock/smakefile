@@ -1,0 +1,4 @@
+# SMakeFile for SaveBlock.c
+
+saveblock: saveblock.c asmsupport.o
+  SC:C/SC saveblock.c asmsupport.o

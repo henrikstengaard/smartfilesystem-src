@@ -1,0 +1,64 @@
+# SMakeFile for FileSystemMain.c
+#
+# OptimizerGlobal
+
+filesystemmain: filesystemmain.c
+filesystemmain: adminspaces.o asmsupport.o bitmap.o btreenodes.o cachebuffers.o cachedio.o deviceio.o locks.o nodes.o objects.o support.o transactions.o
+filesystemmain: debug.o fs.h blockstructure.h
+  SC:C/SC filesystemmain.c adminspaces.o bitmap.o btreenodes.o cachebuffers.o cachedio.o debug.o deviceio.o locks.o nodes.o objects.o support.o transactions.o asmsupport.o lib:amiga.lib lib:debug.lib
+
+adminspaces.o: adminspaces.c adminspaces.h adminspaces_protos.h
+adminspaces.o: cachebuffers.o
+adminspaces.o: debug.o fs.h blockstructure.h
+  SC:C/SC adminspaces.c NOLINK
+
+bitmap.o: bitmap.c bitmap.h bitmap_protos.h
+bitmap.o: cachebuffers.o
+bitmap.o: debug.o fs.h blockstructure.h
+  SC:C/SC bitmap.c NOLINK
+
+btreenodes.o: btreenodes.c btreenodes.h btreenodes_protos.h
+btreenodes.o: adminspaces.o cachebuffers.o
+btreenodes.o: debug.o fs.h blockstructure.h
+  SC:C/SC btreenodes.c NOLINK
+
+cachebuffers.o: cachebuffers.c cachebuffers.h cachebuffers_protos.h
+cachebuffers.o: debug.o fs.h
+  SC:C/SC cachebuffers.c NOLINK
+
+cachedio.o: cachedio.c cachedio_protos.h
+cachedio.o: deviceio.o support.o
+  SC:C/SC cachedio.c NOLINK
+
+debug.o: debug.c debug.h debug_protos.h
+debug.o: fs.h
+  SC:C/SC debug.c NOLINK
+
+deviceio.o: deviceio.c deviceio.h deviceio_protos.h
+deviceio.o: asmsupport.o support.o
+deviceio.o: debug.o
+  SC:C/SC deviceio.c NOLINK
+
+locks.o: locks.c locks.h locks_protos.h
+locks.o: objects.o support.o
+locks.o: debug.o fs.h blockstructure.h
+  SC:C/SC locks.c NOLINK
+
+nodes.o: nodes.c nodes.h nodes_protos.h
+nodes.o: adminspaces.o cachebuffers.o support.o
+nodes.o: debug.o fs.h blockstructure.h
+  SC:C/SC nodes.c NOLINK
+
+objects.o: objects.c objects.h objects_protos.h
+objects.o: adminspaces.o cachebuffers.o nodes.o
+objects.o: debug.o fs.h blockstructure.h
+  SC:C/SC objects.c NOLINK
+
+support.o: support.c support_protos.h
+support.o: debug.o fs.h blockstructure.h
+  SC:C/SC support.c NOLINK
+
+transactions.o: transactions.c transactions.h transactions_protos.h
+transactions.o: cachebuffers.o
+transactions.o: debug.o fs.h blockstructure.h
+  SC:C/SC transactions.c NOLINK

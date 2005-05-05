@@ -1,0 +1,4 @@
+FROM LIB:c.o "BOOT:Work/FS/TestProgs/setfilesize.o"
+TO "BOOT:Work/FS/TestProgs/setfilesize"
+LIB LIB:sc.lib LIB:amiga.lib
+

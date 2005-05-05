@@ -1,0 +1,6 @@
+FROM "BOOT:Work/FS/deviceio2.o"
+TO "BOOT:Work/FS/deviceio2"
+LIB LIB:sc.lib LIB:amiga.lib
+NOICONS
+DEFINE @__chkabort=@__dummy
+

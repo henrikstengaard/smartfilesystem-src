@@ -1,0 +1,178 @@
+Program      : Smart Filesystem 1.78
+Release date : Sep 19 1999
+
+     =================== WARNING =======================
+
+This is a new BETA release of the Smart Filesystem, which has
+only been tested on my own system, so be warned!
+
+If you want to help find problems with this version, then make
+absolutely sure you test this version on a partition which does
+not contain any important data.  I'll not be responsible for
+any loss of data for those who simply ignore this warning and
+think they can use this version under normal circumstances.
+
+I'd advice anyone who doesn't want to help testing SFS but
+simply wants a new stable version to wait until this version
+is debugged further.
+
+                             -- John Hendrikx (hjohn@xs4all.nl)
+
+     =================== WARNING =======================
+
+
+Changes since 1.62:
+-------------------
+
+- Optimized a dozen different routines to improve small file
+  writing speed.  CPU usage is also lower in those circumstances
+  now.
+
+- Copyback cache has been improved.  The cache doesn't need to
+  read a line anymore before it can do a write to that line (no
+  read-on-write).  The read will be delayed until it is needed,
+  or it won't even be performed at all.  Previously SFS always
+  did a read-on-write (similair to the 040 copyback cache).
+
+- In 1.58 a bug was introduced which could cause a requester to
+  appear where SFS claims it wants to mark 32 blocks, but some
+  of those were already in use.  The requester usually appears
+  when a disk is quite full and quite fragmented.  The bug most
+  likely didn't cause any damage (SFScheck reports everything ok
+  after the requester appears), but it was annoying nonetheless.
+  This is now fixed.
+
+- The Defragmenter is now finally debugged far enough to allow
+  it to be BETA tested.  The speed problems and the problems
+  which could arise when accessing the disk while it was being
+  defragmented should now be eliminated.  More on the
+  defragmenter below.
+
+- SFS now will try to prevent fragmentation when multiple files
+  are written in small bits to a SFS disk at the same time.
+  Previously worst-case fragmentation could occur, where each of
+  2 files occupied one block after the other.  Now SFS tries to
+  make each part of the file atleast 10 blocks large.
+
+- SFS now estimates the size of the Adminstration space it needs
+  and will write file-data after this reserved size to the disk.
+  The reserved area is not fixed, and when the disk gets full it
+  will simply be used normally.  The effect of this is that
+  Administration blocks will get grouped at the start of the disk
+  (as long as there is space there).  Previously these
+  Administration areas would be scattered all over the disk.
+
+- A new packet, ACTION_SFS_SET, has been added.  See packets.h
+  for details.  It allows you to set some parameters of SFS
+  (until reboot for now).  No tool is provided yet to set these
+  parameters.
+
+- SFS no longer crashes when used under Kickstart 1.3.  It now
+  simply exits without mounting.
+
+- A work-around for a (possible) bug in ixemul.library (47.3) has
+  been added.  The bug has to do with Soft Links.  This bug only
+  shows up under SFS -- FFS is not affected.
+
+- Changed directory scanning order slightly.  This should reduce
+  problems even further with tools which modify entries in a
+  directory while scanning.
+
+- A new version of SFScheck has been added.
+
+
+The Defragmenter
+----------------
+
+Before you use it, understand that defragmenting a disk is
+no small operation.  Even though SFS will use the same
+safe-writing techniques during defragmentation as it does
+normally it would be VERY wise to backup your disk before
+using it, especially since this is the first BETA release of
+the defragmenter.
+
+Having said that, these are the features of the Defragmenter:
+
+- Defragments files and free space.
+
+- 100% transparent; defragment a disk while you're still
+  reading and writing data from/to it (SFS won't guarantee
+  a 100% defragmented disk when the disk has been modified
+  during defragmentation though).
+
+- Defragmentation uses the same safe-writing techniques which
+  SFS always uses.  This means a crash, reset or power failure
+  will not cause you to lose any data, even while the
+  defragmenter is running.
+
+  The price you pay for this feature is speed and a not 100%
+  optimal defragmentation (there is a big difference between
+  a simple defragmenter and a disk optimizer like ReOrg).
+
+- A very simple interface is provided to activate the
+  defragmenter built-in SFS.  See packets.h and the source of
+  SFSdefragmentGUI for more information.
+
+When you use the defragmenter, it is wise to allocate extra
+buffers to speed up the process.  Adding about 1000-2000
+extra buffers would be a very good idea.  If you think the
+defragmenter is still scanning the disk too much without
+much progress, then adding more buffers might help.
+
+
+SFSdefragmentGUI
+----------------
+
+This is a VERY basic GUI for the SFS defragmenter which I
+created in a couple of hours.  I do not intend to extend it
+much further, but it is provided as an example and because
+(currently) it is the only means to start the defragmenter.
+
+It has one parameter, which is the drive you want to
+defragment.  Once you start SFSdefragmentGUI it will start
+defragmenting immediately.  Note that the defragmenter will
+NOT wait for the drive to be unused -- it will start
+defragmenting immediately hogging the drive and slowing down
+any normal reads or writes you are doing to that drive.
+
+Once the program is started it will display a simple map of
+your drive so you can see what's going on.  This map is
+constantly updated and you can see the reads/writes SFS
+does.  Note that only changes made by the defragmenter are
+tracked here; other program writing to the disk will not
+show up in this map, and thus the map isn't always 100%
+correct.
+
+You can stop the defragmenter at any time by closing the
+defragmenter window.  Restarting it will cause SFS to
+continue defragmentation where it left of (it will skip the
+defragmentated parts at the beginning of the disk quickly).
+
+You can resize the GUI if you like -- a last minute feature
+I added :-)
+
+I'm not sure what the memory requirements are, but the
+defragmenter will need atleast enough memory to hold the
+bitmap of the drive in memory.  This is usually about 0.25%
+of the total size of the drive you are trying to defragment
+plus the memory needed to show the window (depends on the
+window size).  For a 2 GB drive the total memory
+requirements are about 1 MB.
+
+
+SFScheck
+--------
+
+SFScheck has a few new parameters:
+
+ LOCK - causes the drive to be locked during checking, which
+        prevents the 'fake' errors SFScheck can report if the
+        drive is modified during the check.
+
+ LINES/READAHEAD - Work exactly the same as the parameters of
+                   SetCache.  You can use these to control the
+                   size of the Cache SFScheck uses while scanning
+                   the disk.  Setting LINES to 512 for example can
+                   drastically reduce checking time (for larger
+                   disks, more may be necessary).  Just try it
+                   on the command-line to find out a good value.

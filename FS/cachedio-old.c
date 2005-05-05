@@ -1,0 +1,852 @@
+#include <dos/dos.h>
+#include <exec/lists.h>
+#include <exec/types.h>
+#include <proto/exec.h>
+
+#include "cachedio_protos.h"
+#include "deviceio.h"
+#include "deviceio_protos.h"
+
+
+#define removem(n)    (n)->mln_Succ->mln_Pred=(n)->mln_Pred; (n)->mln_Pred->mln_Succ=(n)->mln_Succ
+#define addtailm(l,n) (n)->mln_Succ=(l)->mlh_TailPred->mln_Succ; (l)->mlh_TailPred->mln_Succ=(n); (n)->mln_Pred=(l)->mlh_TailPred; (l)->mlh_TailPred=(n)
+#define addheadm(l,n) (n)->mln_Succ=(l)->mlh_Head; (n)->mln_Pred=(struct MinNode *)(l); (l)->mlh_Head->mln_Pred=(n); (l)->mlh_Head=(n);
+
+
+// #include "debug.h"
+
+extern UWORD shifts_block;               /* shift count needed to convert a blockoffset<->byteoffset */
+extern ULONG bufmemtype;
+extern ULONG blocks_total;               /* size of the partition in blocks */
+
+
+extern void dreq(UBYTE *fmt, ... );
+
+/* Internal globals */
+
+#define IOC_HASHSHIFT (6)
+#define IOC_HASHSIZE (1<<IOC_HASHSHIFT)
+
+struct IOCache *ioc_hashtable[IOC_HASHSIZE];
+struct MinList *iocache_lruhead=0;
+ULONG iocache_mask;
+ULONG iocache_sizeinblocks;
+ULONG iocache_lines=8;
+WORD iocache_shift;
+BYTE iocache_copyback=TRUE;
+UBYTE pad8;
+
+
+
+
+/* Internal structures */
+
+struct IOCache {
+  struct MinNode node;   /* LRU chain */
+
+  struct IOCache *nexthash;
+  struct IOCache *prevhash;
+
+  ULONG block;           /* Unused IOCache has blocks = 0 */
+  ULONG blocks;
+
+  UBYTE bits;            /* See defines below */
+  UBYTE pad2;
+  UBYTE dirtylow;        /* Lowest dirty block.  0 = first.  Default value = 255 */
+  UBYTE dirtyhigh;       /* Highest dirty block.  0 = first.  Default value = 0 */
+
+  void *data;
+};
+
+/* defines for IOCache bits */
+
+#define IOC_DIRTY (1)   /* IOCache contains dirty data */
+
+
+
+/*
+
+Functions making use of the IOCache mechanism:
+
+read - reads one or more blocks into a buffer.
+write - writes one or more blocks from a buffer.
+
+The IOCache system is a simple caching mechanism intended to
+make maximum use of small reads.  The filesystem likes to
+read single blocks, which are usually only 512 bytes in
+size.  Most harddisks however can read a lot more data in a
+single access without a speed penalty.
+
+This is where the IOCaches come in.  Instead of reading just
+512 bytes, the system will read for example 4096 bytes.  It
+reads this information into IOCache buffers.  The data
+actually required is copied from the IOCache into the
+supplied buffer.
+
+This makes Writes a little bit more complex.  Because data
+can reside in the cache each Write must be checked to see if
+one of the IOCaches doesn't need to be updated or flushed.
+Whether an IOCache must be updated or flushed depends on the
+mode the cache operates in.  WriteThrough caching means the
+buffers are just updated and kept in memory.  Otherwise a
+buffer is simply marked invalid.
+
+*/
+
+
+
+void hashit(struct IOCache *ioc) {
+  WORD hashentry=(ioc->block>>iocache_shift) & IOC_HASHSIZE-1;
+
+  ioc->nexthash=ioc_hashtable[hashentry];
+  if(ioc->nexthash!=0) {
+    ioc->nexthash->prevhash=ioc;
+  }
+  ioc->prevhash=0;
+  ioc_hashtable[hashentry]=ioc;
+}
+
+
+
+void dehash(struct IOCache *ioc) {
+  if(ioc->blocks!=0) {
+    if(ioc->nexthash!=0) {
+      ioc->nexthash->prevhash=ioc->prevhash;
+    }
+    if(ioc->prevhash!=0) {
+      ioc->prevhash->nexthash=ioc->nexthash;
+    }
+    else {
+      ioc_hashtable[ (ioc->block>>iocache_shift) & IOC_HASHSIZE-1 ]=ioc->nexthash;    /* Aug 11 1998: changed '=0' to '=ioc->nexthash' !! */
+    }
+  }
+
+  ioc->nexthash=0;
+  ioc->prevhash=0;
+}
+
+
+
+void invalidateiocache(struct IOCache *ioc) {
+  dehash(ioc);
+  ioc->blocks=0;
+  ioc->block=0;
+  ioc->bits=0;
+  ioc->dirtylow=255;
+  ioc->dirtyhigh=0;
+}
+
+
+
+void free(struct MinList *lruhead) {
+
+  /* Frees all IOCache buffers attached to the passed in list and the
+     listheader itself.  If lruhead is zero then this function does
+     nothing. */
+
+  if(lruhead!=0) {
+    while(lruhead->mlh_TailPred != (struct MinNode *)lruhead) {
+      struct IOCache *ioc=(struct IOCache *)lruhead->mlh_Head;
+
+      removem(lruhead->mlh_Head);
+
+      FreeVec(ioc);
+    }
+
+    FreeMem(lruhead, sizeof(struct MinList));
+  }
+}
+
+
+
+struct MinList *allocate(ULONG size, LONG n) {
+  struct MinList *lruhead;
+
+  /* Allocates n IOCache buffers of /size/ bytes and attaches
+     them to the returned MinList.  The MinList is returned
+     and is zero if there wasn't enough memory. */
+
+  if((lruhead=AllocMem(sizeof(struct MinList), bufmemtype))!=0) {
+    struct IOCache *ioc;
+
+    lruhead->mlh_Head=(struct MinNode *)&lruhead->mlh_Tail;
+    lruhead->mlh_Tail=0;
+    lruhead->mlh_TailPred=(struct MinNode *)lruhead;
+
+    size+=sizeof(struct IOCache)+16;
+
+    while(--n>=0 && (ioc=AllocVec(size, bufmemtype))!=0) {
+      ioc->blocks=0;       // Mar 11 1999: Added this line to avoid that dehash() makes a mess of things.
+      ioc->nexthash=0;
+      ioc->prevhash=0;
+      invalidateiocache(ioc);
+
+      /* ioc->data is aligned to 16 byte boundaries. */
+      ioc->data=(UBYTE *)((ULONG)((UBYTE *)ioc+sizeof(struct IOCache)+15) & 0xFFFFFFF0);
+
+      addtailm(lruhead, &ioc->node);
+    }
+
+    if(n<0) {
+      return(lruhead);
+    }
+
+    free(lruhead);
+  }
+
+  return(0);
+}
+
+
+
+ULONG queryiocache_lines(void) {
+  return(iocache_lines);
+}
+
+
+
+ULONG queryiocache_readaheadsize(void) {
+  return(iocache_sizeinblocks << shifts_block);
+}
+
+
+
+BYTE queryiocache_copyback(void) {
+  return(iocache_copyback);
+}
+
+
+
+LONG setiocache(ULONG lines, ULONG readahead, BYTE copyback) {
+  struct MinList *lruhead;
+  ULONG sizeinblocks=readahead>>shifts_block;
+  WORD shift;
+
+  /* This function changes the size and type of the IOCache.  The
+     old Cache settings will remain in effect if the new ones
+     couldn't be applied due to lack of memory.
+
+     When this function is called first time, there are no old
+     settings! */
+
+  if(sizeinblocks<4) {
+    shift=1;
+  }
+  else if(sizeinblocks<8) {
+    shift=2;
+  }
+  else if(sizeinblocks<16) {
+    shift=3;
+  }
+  else if(sizeinblocks<32) {
+    shift=4;
+  }
+  else if(sizeinblocks<64) {
+    shift=5;
+  }
+  else if(sizeinblocks<128) {
+    shift=6;
+  }
+  else {
+    shift=7;
+  }
+
+  sizeinblocks=1<<shift;
+
+  if(lines<4) {
+    lines=4;
+  }
+  else if(lines>1024) {
+    lines=1024;
+  }
+
+  if((lruhead=allocate(sizeinblocks<<shifts_block, lines))!=0) {
+    LONG errorcode=0;
+
+    if(iocache_lruhead==0 || (errorcode=flushiocache())==0) {
+      WORD m=IOC_HASHSIZE;
+
+      iocache_sizeinblocks=sizeinblocks;
+      iocache_lines=lines;
+      iocache_copyback=copyback;
+      iocache_mask=sizeinblocks-1;
+      iocache_shift=shift;
+
+      free(iocache_lruhead);
+      iocache_lruhead=lruhead;
+
+      while(--m>=0) {
+        ioc_hashtable[m]=0;
+      }
+    }
+    else {
+      free(lruhead);
+    }
+
+    return(errorcode);
+  }
+
+  return(ERROR_NO_FREE_STORE);
+}
+
+
+
+
+/* The IOCache is automatically disabled when iocache_lines == 0 */
+
+LONG initcachedio(UBYTE *devicename, ULONG unit, ULONG flags, struct DosEnvec *de) {
+  LONG errorcode;
+
+  if((errorcode=initdeviceio(devicename, unit, flags, de))==0) {
+
+    /* Note: There MUST be atleast 4 IOCache_lines for cachedio to work correctly at the moment!! */
+
+    if((setiocache(8, 8192, TRUE))==0) {
+      return(0);
+    }
+  }
+
+  return(errorcode);
+}
+
+
+
+void cleanupcachedio(void) {
+
+  /* Only call this if initcachedio() was succesful. */
+
+  flushiocache();    /*** returns an errorcode... */
+  free(iocache_lruhead);
+  iocache_lruhead=0;
+
+  iocache_lines=0;
+
+  cleanupdeviceio();
+}
+
+
+
+struct IOCache *findiocache(BLCK block) {
+  struct IOCache *ioc=ioc_hashtable[ (block>>iocache_shift) & IOC_HASHSIZE-1 ];
+
+  /* For internal use only.  This function will find the IOCache, if available.
+     It won't move the block to the end of the LRU chain though -- use locateiocache
+     instead. */
+
+  while(ioc!=0) {
+    if(block>=ioc->block && block<ioc->block+ioc->blocks) {
+      return(ioc);
+    }
+
+    ioc=ioc->nexthash;
+  }
+
+  return(0);
+}
+
+
+
+struct IOCache *locateiocache(BLCK block) {
+  struct IOCache *ioc;
+
+  if((ioc=findiocache(block))!=0) {
+    removem(&ioc->node);
+    addtailm(iocache_lruhead, &ioc->node);
+  }
+
+  return(ioc);
+}
+
+
+
+LONG copybackiocache(struct IOCache *ioc) {
+  LONG errorcode=0;
+
+  /* Writes out any dirty data, and resets the dirty bit.
+
+     For extra efficiency this function will in case of a physical
+     disk-access also flush any buffers following this one, to avoid
+     physical head movement. */
+
+  while(ioc!=0 && ioc->blocks!=0 && (ioc->bits & IOC_DIRTY)!=0) {
+    if((errorcode=transfer(DIO_WRITE, (UBYTE *)ioc->data + (ioc->dirtylow<<shifts_block), ioc->block + ioc->dirtylow, ioc->dirtyhigh - ioc->dirtylow + 1))!=0) {
+      break;
+    }
+
+    ioc->bits&=~IOC_DIRTY;
+    ioc->dirtylow=255;
+    ioc->dirtyhigh=0;
+
+    ioc=findiocache(ioc->block+ioc->blocks);
+  }
+
+  return(errorcode);
+}
+
+
+
+LONG flushiocache(void) {
+  struct IOCache *ioc;
+  LONG errorcode=0;
+
+  /* Writes all dirty data to disk, but keeps the cached data for
+     later reads.  Use this to ensure data is comitted to disk
+     when doing critical operations. */
+
+  ioc=(struct IOCache *)iocache_lruhead->mlh_Head;
+
+  while(ioc->node.mln_Succ!=0) {
+    if((errorcode=copybackiocache(ioc))!=0) {
+      break;
+    }
+
+    ioc=(struct IOCache *)(ioc->node.mln_Succ);
+  }
+
+  if(errorcode==0) {
+    update();
+  }
+
+//  DEBUG(("flushiocache: errorcode = %ld\n", errorcode));
+
+  return(errorcode);
+}
+
+
+
+void invalidateiocaches(void) {
+  struct IOCache *ioc;
+
+  /* Clears all buffers in the IOCache.  This should be used BEFORE
+     directly writing to the disk (for example, call this before
+     ACTION_INHIBIT(TRUE)).  Before calling this function make
+     sure all pending changes have been flushed using flushiocache() */
+
+  ioc=(struct IOCache *)iocache_lruhead->mlh_Head;
+
+  while(ioc->node.mln_Succ!=0) {
+    invalidateiocache(ioc);
+
+    ioc=(struct IOCache *)(ioc->node.mln_Succ);
+  }
+}
+
+
+
+LONG lruiocache(struct IOCache **returned_ioc) {
+  struct IOCache *ioc;
+  LONG errorcode;
+
+  /* Returns the least recently used IOCache */
+
+  ioc=(struct IOCache *)iocache_lruhead->mlh_Head;
+
+  removem(&ioc->node);
+  addtailm(iocache_lruhead, &ioc->node);
+
+  if((errorcode=copybackiocache(ioc))!=0) {
+    return(errorcode);
+  }
+  invalidateiocache(ioc);
+
+  *returned_ioc=ioc;
+
+  return(0);
+}
+
+
+void reuseiocache(struct IOCache *ioc) {
+
+  /* This function makes sure that the passed in IOCache is reused
+     as quickly as possible.  This is a good idea if you used an IOCache
+     and you're certain it won't be needed again.  In such a case you
+     can call this function so this cache is the first to be reused. */
+
+  removem(&ioc->node);
+  addheadm(iocache_lruhead, &ioc->node);
+}
+
+
+void copyiocachetobuffer(struct IOCache *ioc,BLCK *block,UBYTE **buffer,ULONG *blocks) {
+  ULONG blockoffset=*block-ioc->block;
+  ULONG blocklength=ioc->blocks-blockoffset;
+
+  if(*blocks<blocklength) {
+    blocklength=*blocks;
+  }
+
+  if(((ULONG)(*buffer) & 0x00000003) != 0) {
+    CopyMem((UBYTE *)ioc->data + (blockoffset<<shifts_block), *buffer, blocklength<<shifts_block);
+  }
+  else {
+    CopyMemQuick((UBYTE *)ioc->data + (blockoffset<<shifts_block), *buffer, blocklength<<shifts_block);
+  }
+
+  *block+=blocklength;
+  *blocks-=blocklength;
+  *buffer+=blocklength<<shifts_block;
+}
+
+
+
+LONG readintocache(BLCK block,struct IOCache **returned_ioc) {
+  struct IOCache *ioc;
+  LONG errorcode=0;
+
+  if((ioc=locateiocache(block))==0) {
+    ULONG blockstart=block & ~iocache_mask;
+    ULONG blocklength=iocache_sizeinblocks;
+
+    if(blockstart+blocklength>blocks_total) {
+      blocklength=blocks_total-blockstart;
+    }
+
+    if((errorcode=lruiocache(&ioc))==0) {
+      if((errorcode=transfer(DIO_READ,ioc->data,blockstart,blocklength))==0) {
+        ioc->block=blockstart;
+        ioc->blocks=blocklength;
+        hashit(ioc);
+      }
+    }
+  }
+
+  *returned_ioc=ioc;
+
+  return(errorcode);
+}
+
+
+
+LONG copybackoverlappingiocaches(BLCK block, ULONG blocks) {
+  struct IOCache *ioc;
+  BLCK lastblock;
+  LONG errorcode=0;
+
+  /* This function copies back any IOCaches which fall (partially) in the
+     region specified by the input parameters. */
+
+  lastblock=(block+blocks-1) & ~iocache_mask;
+  block=block & ~iocache_mask;
+
+  while(block<=lastblock) {                       // Aug 6 1998: Changed '<' into '<='.
+    if((ioc=locateiocache(block))!=0) {
+      if((errorcode=copybackiocache(ioc))!=0) {
+        break;
+      }
+    }
+    block+=iocache_sizeinblocks;
+  }
+
+  return(errorcode);
+}
+
+
+
+void markdirty(struct IOCache *ioc, ULONG startblock, ULONG endblock) {
+
+  /* startblock and endblock are both inclusive */
+
+  ioc->bits|=IOC_DIRTY;
+
+  startblock-=ioc->block;
+  endblock-=ioc->block;
+
+  if(ioc->dirtylow > startblock) {
+    ioc->dirtylow=startblock;
+  }
+
+  if(ioc->dirtyhigh < endblock) {
+    ioc->dirtyhigh=endblock;
+  }
+}
+
+
+
+LONG readbytes(BLCK block, UBYTE *buffer, UWORD offsetinblock, UWORD bytes) {
+  LONG errorcode;
+
+  /* This function is intended to copy data directly from a IOCache buffer
+     which was read.  It can be used for small amounts of data only (1 to
+     bytes_block bytes)
+
+     This function will fall back to reading a single block if the cache
+     is disabled. */
+
+/*  #ifdef CHECKCODE
+    if(offsetinblock+bytes>bytes_block) {
+      dreq("readbytes: Tried to read too many bytes.\nPlease notify the author!");
+    }
+  #endif */
+
+//  if(iocache_lines!=0) {
+
+    struct IOCache *ioc;
+
+    if((errorcode=readintocache(block, &ioc))==0) {
+      CopyMem((UBYTE *)ioc->data+((block-ioc->block)<<shifts_block) + offsetinblock, buffer, bytes);
+    }
+
+/*  }
+  else {
+    struct CacheBuffer *cb;
+
+    cb=getcachebuffer();
+
+    if((errorcode=read(block, cb->data, 1))==0) {
+      CopyMem((UBYTE *)cb->data + offsetinblock, buffer, bytes);
+    }
+
+    emptycachebuffer(cb);
+  } */
+
+  return(errorcode);
+}
+
+
+
+LONG writebytes(BLCK block, UBYTE *buffer, UWORD offsetinblock, UWORD bytes) {
+  LONG errorcode;
+
+  /* This function is intended to copy data directly into a IOCache buffer
+     which was read.  It can be used for small amounts of data only (1 to
+     bytes_block bytes).
+
+     This function will fall back to reading/modifying/writing a single
+     block if the cache or copyback caching is disabled. */
+
+/*  #ifdef CHECKCODE
+    if(offsetinblock+bytes>bytes_block) {
+      dreq("writebytes: Tried to write too many bytes.\nPlease notify the author!");
+    }
+  #endif */
+
+//  if(iocache_lines!=0) {
+
+    struct IOCache *ioc;
+
+    if((errorcode=readintocache(block, &ioc))==0) {
+      CopyMem(buffer, (UBYTE *)ioc->data + ((block-ioc->block)<<shifts_block) + offsetinblock, bytes);
+      if(iocache_copyback==FALSE) {
+        errorcode=write(block, (UBYTE *)ioc->data+((block-ioc->block)<<shifts_block), 1);
+      }
+      else {
+        markdirty(ioc, block, block);
+      }
+    }
+
+/*  }
+  else {
+    struct CacheBuffer *cb;
+
+    cb=getcachebuffer();
+
+    if((errorcode=read(block, cb->data, 1))==0) {
+      CopyMem(buffer, (UBYTE *)cb->data + offsetinblock, bytes);
+      errorcode=write(block, cb->data, 1);
+    }
+
+    emptycachebuffer(cb);
+  } */
+
+  return(errorcode);
+}
+
+
+
+
+LONG read(BLCK block,UBYTE *buffer,ULONG blocks) {
+  LONG errorcode=0;
+
+  if(blocks!=0) {
+    /* The readahead caching system works simple; if the data-request is lesser
+       than or equal to the line-size than we first try to locate the data in
+       the cache.  If it is available it is copied and returned.  If the data
+       isn't available then it is read into the cache, and copied afterwards.
+
+       Large requests are processed seperately and don't go through the cache.
+       The idea is that large requests are quite fast when loaded from the HD
+       anyway.  Also, to be able to properly speed up even large requests you'd
+       also need a substantially larger cache, which isn't what we want here. */
+
+    if(iocache_lines!=0 && blocks<=iocache_sizeinblocks>>1) {        // ****** // dit kan sneller, als het ondanks het te grote request toch in de cache staat!
+      struct IOCache *ioc;
+
+      while(errorcode==0 && blocks!=0) {
+        if((errorcode=readintocache(block,&ioc))==0) {
+          copyiocachetobuffer(ioc,&block,&buffer,&blocks);
+        }
+      }
+    }
+    else {
+      if((errorcode=copybackoverlappingiocaches(block,blocks))==0) {
+        errorcode=transfer(DIO_READ,buffer,block,blocks);
+      }
+    }
+  }
+
+  return(errorcode);
+}
+
+
+
+void writethroughoverlappingiocaches(BLCK block, ULONG blocks, UBYTE *buffer) {
+  struct IOCache *ioc;
+  BLCK firstblock;
+  BLCK lastblock;
+
+  /* This function copies data from the buffer to any IOCaches which fall (partially)
+     in the region specified by the input parameters. */
+
+  firstblock=block & ~iocache_mask;
+  lastblock=(block+blocks-1) & ~iocache_mask;
+
+  while(firstblock<=lastblock) {
+    if((ioc=locateiocache(firstblock))!=0) {
+      BLCK startblock,endblock;
+      ULONG srcoffset,destoffset;
+
+//      DEBUG(("IOCACHE: found overlapping cache (%ld-%ld) for block %ld of %ld blocks\n",ioc->block,ioc->block+ioc->blocks-1,block,blocks));
+
+      /* |-------|            |-----|               |-------|            |---------|
+           |=======|        |=========|           |=======|                |=====|     */
+
+      startblock=block;
+      if(startblock<ioc->block) {
+        startblock=ioc->block;
+      }
+
+      endblock=block+blocks;
+      if(endblock>ioc->block+ioc->blocks) {
+        endblock=ioc->block+ioc->blocks;
+      }
+
+      /* startblock and endblock (exclusive) now contain the region to be
+         overwritten in this IOCache. */
+
+      if(iocache_copyback!=FALSE && (ioc->bits & IOC_DIRTY)!=0) {
+        ULONG sblock=startblock-ioc->block;
+        ULONG eblock=endblock-ioc->block-1;
+
+        /* Copyback mode is active!  We need to unmark any dirty blocks
+           which are now overwritten. */
+
+        if(ioc->dirtylow >= sblock && ioc->dirtyhigh <= eblock) {
+          ioc->bits&=~IOC_DIRTY;
+          ioc->dirtylow=255;
+          ioc->dirtyhigh=0;
+        }
+        else if(ioc->dirtylow >= sblock && ioc->dirtyhigh > eblock) {
+          ioc->dirtylow=eblock+1;
+        }
+        else if(ioc->dirtylow < sblock && ioc->dirtyhigh <= eblock) {
+          ioc->dirtyhigh=sblock-1;
+        }
+
+        /* Doesn't unmark all blocks if dirty area is completely overlaps
+           and is larger than the new data.  In that case dirty area is
+           kept and is copied back as normal. */
+      }
+
+      srcoffset=(startblock-block)<<shifts_block;
+      destoffset=(startblock-ioc->block)<<shifts_block;
+
+      if(((ULONG)buffer & 0x00000003) != 0) {
+        CopyMem(buffer+srcoffset,(UBYTE *)ioc->data+destoffset,(endblock-startblock)<<shifts_block);
+      }
+      else {
+        CopyMemQuick(buffer+srcoffset,(UBYTE *)ioc->data+destoffset,(endblock-startblock)<<shifts_block);
+      }
+    }
+    firstblock+=iocache_sizeinblocks;
+  }
+}
+
+
+
+LONG write(BLCK block,UBYTE *buffer,ULONG blocks) {
+
+  if(iocache_lines!=0) {
+    ULONG maxblocks=iocache_sizeinblocks>>2;
+
+    if(maxblocks==0) {
+      maxblocks=1;
+    }
+
+//  if(iocache_copyback!=FALSE && (block & ~iocache_mask) == ((block+blocks-1) & ~iocache_mask))
+
+    if(iocache_copyback!=FALSE && blocks<=maxblocks) {
+      struct IOCache *ioc;
+      struct IOCache *ioc2;
+      LONG errorcode;
+
+//    /* Copyback mode is active AND this write fits nicely into a single IOCache! */
+
+      if((errorcode=readintocache(block,&ioc))==0) {                  /* a trick, which works because cachesystem consists of atleast 4 blocks. */
+        if((errorcode=readintocache(block+blocks-1,&ioc2))==0) {
+//          UBYTE startblock=block-ioc->block;
+
+          writethroughoverlappingiocaches(block,blocks,buffer);  /* This function kills dirty blocks if needed. */
+
+          if(ioc==ioc2) {
+            markdirty(ioc, block, block+blocks-1);
+          }
+          else {
+            markdirty(ioc, block, ioc->block+ioc->blocks-1);
+            markdirty(ioc2, ioc2->block, block+blocks-1);
+          }
+
+          /*
+          ioc->bits|=IOC_DIRTY;
+
+          if(ioc->dirtylow > startblock) {
+            ioc->dirtylow=startblock;
+          }
+
+          if(ioc==ioc2) {
+            UBYTE endblock=block+blocks-ioc->block-1;
+
+            if(ioc->dirtyhigh < endblock) {
+              ioc->dirtyhigh=endblock;
+            }
+          }
+          else {
+            UBYTE endblock=block+blocks-ioc2->block-1;
+
+            ioc->dirtyhigh=ioc->blocks-1;
+            ioc2->dirtylow=0;
+            ioc2->bits|=IOC_DIRTY;
+
+            if(ioc2->dirtyhigh < endblock) {
+              ioc2->dirtyhigh=endblock;
+            }
+          }
+          */
+
+//   DEBUG(("IOCACHE: dirtylow/high = %ld/%ld\n",ioc->dirtylow,ioc->dirtyhigh));
+        }
+      }
+
+      return(errorcode);
+    }
+    else {
+      writethroughoverlappingiocaches(block,blocks,buffer);
+
+      return(transfer(DIO_WRITE,buffer,block,blocks));
+    }
+  }
+  else {
+    return(transfer(DIO_WRITE,buffer,block,blocks));
+  }
+}
+
+
+LONG getbuffer(UBYTE **tempbuffer, ULONG *maxblocks) {
+  struct IOCache *ioc;
+
+  lruiocache(&ioc);         /** Might fail!!  Make sure it never does! */
+  reuseiocache(ioc);
+  *tempbuffer=ioc->data;
+  *maxblocks=iocache_sizeinblocks;
+
+  return(0);
+}

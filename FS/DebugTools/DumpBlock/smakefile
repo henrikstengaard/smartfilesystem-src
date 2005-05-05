@@ -1,0 +1,4 @@
+# SMakeFile for DumpBlock.c
+
+dumpblock: dumpblock.c asmsupport.o
+  SC:C/SC dumpblock.c asmsupport.o

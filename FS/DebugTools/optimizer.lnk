@@ -1,0 +1,4 @@
+FROM LIB:c.o "BOOT:Work/FS/debugtools/optimizer.o"
+TO "BOOT:Work/FS/debugtools/optimizer"
+LIB LIB:sc.lib LIB:amiga.lib
+

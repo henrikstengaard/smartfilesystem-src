@@ -1,0 +1,4 @@
+FROM LIB:c.o "fragprevent.o"
+TO "fragprevent"
+LIB LIB:sc.lib LIB:amiga.lib
+

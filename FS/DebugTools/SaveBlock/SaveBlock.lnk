@@ -1,0 +1,4 @@
+FROM LIB:c.o "SaveBlock.o"+"asmsupport.o"
+TO "SaveBlock"
+LIB LIB:sc.lib LIB:amiga.lib
+

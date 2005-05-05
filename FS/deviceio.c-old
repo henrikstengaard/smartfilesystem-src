@@ -1,0 +1,774 @@
+#include <devices/scsidisk.h>
+#include <devices/trackdisk.h>
+#include <dos/filehandler.h>
+#include <exec/errors.h>
+#include <exec/interrupts.h>
+#include <exec/io.h>
+#include <exec/memory.h>
+#include <exec/types.h>
+#include <proto/exec.h>
+#include <devices/newstyle.h>      /* Doesn't include exec/types.h which is why it is placed here */
+
+#include "deviceio.h"
+#include "deviceio_protos.h"
+
+#include "debug.h"
+
+extern ULONG __asm MULU64(register __d0 ULONG,register __d1 ULONG,register __a0 ULONG *);
+
+extern LONG getbuffer(UBYTE **tempbuffer, ULONG *maxblocks);
+extern LONG req(UBYTE *fmt, UBYTE *gads, ... );
+extern void starttimeout(void);
+
+struct IOStdReq *ioreq=0;           /* Used for Read/Write */
+struct IOStdReq *ioreq2=0;          /* Used for WriteProtection & DisksChange */
+struct IOStdReq *ioreqchangeint=0;  /* Used for DiskChange interrupt */
+struct MsgPort *msgport=0;
+BYTE deviceopened=FALSE;
+BYTE newstyledevice=FALSE;
+BYTE does64bit=FALSE;
+BYTE scsidirect=FALSE;
+
+struct fsIORequest fsioreq;
+
+/* blocks_  = the number of blocks of something (blocks can contain 1 or more sectors)
+   block_   = a block number of something (relative to start of partition)
+   sectors_ = the number of sectors of something (1 or more sectors form a logical block)
+   sector_  = a sector number (relative to the start of the disk)
+   bytes_   = the number of bytes of something
+   byte_    = a byte number of something
+   shifts_  = the number of bytes written as 2^x of something
+   mask_    = a mask for something */
+
+ULONG sectors_total;              /* size of the partition in sectors */
+UWORD sectors_block;              /* number of sectors in a block */
+
+UWORD shifts_block;               /* shift count needed to convert a blockoffset<->byteoffset */
+
+UWORD cmdread=CMD_READ;
+UWORD cmdwrite=CMD_WRITE;
+
+ULONG sector_low;                 /* sector offset of our partition, needed for SCSI direct */
+ULONG sector_high;                /* last sector plus one of our partition */
+
+ULONG blocks_total;               /* size of the partition in blocks */
+ULONG blocks_maxtransfer=1048576; /* max. blocks which may be transfered to the device at once (limits io_Length) */
+
+ULONG byte_low;                   /* the byte offset of our partition on the disk */
+ULONG byte_lowh;                  /* high 32 bits */
+ULONG byte_high;                  /* the byte offset of the end of our partition (excluding) on the disk */
+ULONG byte_highh;                 /* high 32 bits */
+
+ULONG bytes_block;                /* size of a block in bytes */
+ULONG bytes_sector;               /* size of a sector in bytes */
+
+ULONG mask_block;
+ULONG mask_mask=0xFFFFFFFF;       /* mask as specified by mountlist */
+
+ULONG bufmemtype=MEMF_PUBLIC;   /* default value */
+
+
+/* Internal globals */
+
+struct SCSICmd scsicmd;       /* for SCSIdirect */
+struct SCSI10Cmd scsi10cmd;
+
+
+/* The purpose of the deviceio code is to provide a layer which
+   supports block I/O to devices:
+
+   - Devices are accessed based on Logical Blocks (The partition
+     offset and SectorsPerBlock are taken into account).
+
+   - Devices can be acessed normally or using NSD, TD64 or SCSI
+     direct transparently.
+
+   - MaxTransfer and Mask is handled automatically.
+
+   - Makes sure no accesses outside the partition are allowed. */
+
+
+void update(void) {
+  ioreq->io_Command=CMD_UPDATE;
+  ioreq->io_Length=0;
+  DoIO((struct IORequest *)ioreq);
+}
+
+
+
+void motoroff(void) {
+  ioreq->io_Command=TD_MOTOR;
+  ioreq->io_Length=0;
+  DoIO((struct IORequest *)ioreq);
+}
+
+
+
+UBYTE *errordescription(LONG errorcode) {
+  if(errorcode==TDERR_NotSpecified || errorcode==TDERR_SeekError) {
+    return("General device failure.\nThe disk is in an unreadable format.\n\n");
+  }
+  else if(errorcode==TDERR_BadSecPreamble || errorcode==TDERR_BadSecID || errorcode==TDERR_BadSecHdr || errorcode==TDERR_BadHdrSum || errorcode==TDERR_BadSecSum) {
+    return("Invalid or bad sector.\nThe disk is in an unreadable format.\n\n");
+  }
+  else if(errorcode==TDERR_TooFewSecs || errorcode==TDERR_NoSecHdr) {
+    return("Not enough sectors found.\nThe disk is in an unreadable format.\n\n");
+  }
+  else if(errorcode==TDERR_NoMem) {
+    return("The device ran out of memory.\n\n");
+  }
+  else if(errorcode==HFERR_SelfUnit) {
+    return("\n\n");
+  }
+  else if(errorcode==HFERR_DMA) {
+    return("DMA error.\nThe transfering of data to/from the device failed.\n\n");
+  }
+  else if(errorcode==HFERR_Parity) {
+    return("Parity error.\nThe transfering of data to/from the device failed.\n\n");
+  }
+  else if(errorcode==HFERR_SelTimeout) {
+    return("Selection timeout.\nThe device doesn't respond.\n\n");
+  }
+  else if(errorcode==HFERR_BadStatus || errorcode==HFERR_Phase) {
+    return("General device failure.\nThe device is in an invalid state.\n\n");
+  }
+
+  return("Unknown error.\n\n");
+}
+
+
+
+LONG writeprotection(void) {
+  ioreq2->io_Command=TD_PROTSTATUS;
+  ioreq2->io_Flags=IOF_QUICK;
+
+  if(DoIO((struct IORequest *)ioreq2)==0) {
+    if(ioreq2->io_Actual==0) {
+      /* Not write protected */
+      return(ID_VALIDATED);
+    }
+  }
+  /* Write protected */
+  return(ID_WRITE_PROTECTED);
+}
+
+
+
+UBYTE isdiskpresent(void) {
+  LONG errorcode;
+
+  ioreq2->io_Command=TD_CHANGESTATE;
+  ioreq2->io_Flags=IOF_QUICK;
+
+  if((errorcode=DoIO((struct IORequest *)ioreq2))==0) {
+    if(ioreq2->io_Actual==0) {
+      /* Disk present */
+      return(TRUE);
+    }
+    else {
+      /* No disk inserted */
+      return(FALSE);
+    }
+  }
+
+  req("This device doesn't support disk change detection!\n"\
+      "(errorcode = %ld).  SFS will now assume that a\n"\
+      "disk IS present.", "Ok", errorcode);
+
+  /* If anything went wrong, we assume a disk is inserted. */
+  return(TRUE);
+}
+
+
+
+struct IntData {
+  ULONG *diskchanged;
+  struct Task *task;
+  ULONG signal;
+};
+
+
+
+struct Interrupt changeint;
+struct IntData intdata;
+ULONG diskchanged;
+
+
+
+LONG __interrupt __saveds __asm changeintserver(register __a1 struct IntData *intdata) {
+  *intdata->diskchanged=1;
+
+  Signal(intdata->task, intdata->signal);
+
+  return(0);
+}
+
+
+
+LONG addchangeint(struct Task *task, ULONG signal) {
+  intdata.diskchanged=&diskchanged;
+  intdata.task=task;
+  intdata.signal=signal;
+
+  changeint.is_Data=&intdata;
+  changeint.is_Code=(void (*)())changeintserver;
+
+  ioreqchangeint->io_Command=TD_ADDCHANGEINT;
+  ioreqchangeint->io_Flags=0;
+  ioreqchangeint->io_Length=sizeof(struct Interrupt);
+  ioreqchangeint->io_Data=&changeint;
+  ioreqchangeint->io_Error=0;
+
+  SendIO((struct IORequest *)ioreqchangeint);
+
+  return(ioreqchangeint->io_Error);
+}
+
+
+
+void removechangeint(void) {
+  if(ioreqchangeint!=0 && ioreqchangeint->io_Error==0) {
+    ioreqchangeint->io_Command=TD_REMCHANGEINT;
+
+    SendIO((struct IORequest *)ioreqchangeint);
+  }
+}
+
+
+
+ULONG getchange(void) {
+  ULONG d;
+
+  Disable();
+
+  d=diskchanged;
+  diskchanged=0;
+
+  Enable();
+
+  return(d);
+}
+
+
+
+ULONG deviceapiused(void) {
+  if(scsidirect==TRUE) {
+    return(DAU_SCSIDIRECT);
+  }
+
+  if(newstyledevice==TRUE) {
+    return(DAU_NSD);
+  }
+
+  if(does64bit==TRUE) {
+    return(DAU_TD64);
+  }
+
+  return(DAU_NORMAL);
+}
+
+
+
+LONG getgeometry(ULONG *sectors, ULONG *sectorsize) {
+  struct DriveGeometry dg;
+  LONG errorcode;
+
+  if((ioreq->io_Device->dd_Library.lib_Node.ln_Name=="scsi.device" && ioreq->io_Device->dd_Library.lib_Version<=39) ||
+     (ioreq->io_Device->dd_Library.lib_Node.ln_Name=="HardFrame.device") ||
+     (ioreq->io_Device->dd_Library.lib_Node.ln_Name=="scsidev.device") ||
+     (ioreq->io_Device->dd_Library.lib_Node.ln_Name=="hddisk.device") ||
+     (ioreq->io_Device->dd_Library.lib_Node.ln_Name=="statram.device") ||
+     (ioreq->io_Device->dd_Library.lib_Node.ln_Name=="ramdrive.device")) {
+    return(IOERR_NOCMD);
+  }
+
+  ioreq->io_Command=TD_GETGEOMETRY;
+  ioreq->io_Length=sizeof(struct DriveGeometry);
+  ioreq->io_Flags=0;
+  ioreq->io_Actual=0;
+  ioreq->io_Data=&dg;
+
+  dg.dg_SectorSize=0;
+
+  if((errorcode=DoIO((struct IORequest *)ioreq))==0) {
+    if(dg.dg_SectorSize==512 || dg.dg_SectorSize==1024 || dg.dg_SectorSize==2048 || dg.dg_SectorSize==4096 || dg.dg_SectorSize==8192 || dg.dg_SectorSize==16384 || dg.dg_SectorSize==32768) {
+      *sectors=dg.dg_TotalSectors;
+      *sectorsize=dg.dg_SectorSize;
+    }
+    else {
+      errorcode=IOERR_NOCMD;
+    }
+  }
+
+  return(errorcode);
+}
+
+
+
+void changegeometry(struct DosEnvec *de) {
+  ULONG sectorspercilinder;
+  UWORD bs;
+
+  sectors_block=de->de_SectorPerBlock;
+
+  bytes_sector=de->de_SizeBlock<<2;
+  bytes_block=bytes_sector*de->de_SectorPerBlock;
+
+  bs=bytes_block;
+
+  shifts_block=0;
+  while((bs>>=1)!=0) {
+    shifts_block++;
+  }
+
+  mask_block=bytes_block-1;
+
+  /* Absolute offset on the entire disk are expressed in Sectors;
+     Offset relative to the start of the partition are expressed in Blocks */
+
+  sectorspercilinder=de->de_Surfaces*de->de_BlocksPerTrack;            // 32 bit
+
+  sector_low=sectorspercilinder*de->de_LowCyl;             // Needed for SCSI direct
+  sector_high=sectorspercilinder*(de->de_HighCyl+1);       // Exclusive
+
+  if(sector_low==0) {
+    ULONG totalsectors=0,sectorsize=0;
+
+    if(getgeometry(&totalsectors, &sectorsize)!=0) {
+      totalsectors=0;
+    }
+
+    if(totalsectors!=0) {
+      if(sectorsize==bytes_sector) {
+        sector_high=totalsectors;
+      }
+      else {
+        req("Geometry could not be used because\n"\
+            "sectorsize does not match that of the\n"\
+            "mountlist (%ld<>%ld).\n"\
+            "Please notify the author.", "Continue", sectorsize, bytes_sector);
+      }
+    }
+  }
+
+  sectors_total=sector_high-sector_low;
+//   sectors_total=sectorspercilinder*(de->de_HighCyl+1-de->de_LowCyl);   /* 32 bit */
+
+  blocks_total=sectors_total/sectors_block;
+
+  byte_lowh  = MULU64(sector_low, bytes_sector, &byte_low);
+  byte_highh = MULU64(sector_high, bytes_sector, &byte_high);
+}
+
+
+
+struct fsIORequest *createiorequest(void) {
+  struct fsIORequest *fsi;
+
+  if((fsi=AllocMem(sizeof(struct fsIORequest), MEMF_CLEAR))!=0) {
+    if((fsi->ioreq=CreateIORequest(msgport, sizeof(struct IOStdReq)))!=0) {
+      fsi->ioreq->io_Device=ioreq->io_Device;
+      fsi->ioreq->io_Unit=ioreq->io_Unit;
+    }
+    else {
+      FreeMem(fsi, sizeof(struct fsIORequest));
+    }
+  }
+
+  return(fsi);
+}
+
+
+
+LONG initdeviceio(UBYTE *devicename, ULONG unit, ULONG flags, struct DosEnvec *de) {
+  LONG errorcode=ERROR_NO_FREE_STORE;
+
+  if((msgport=CreateMsgPort())!=0) {
+    if((ioreq=CreateIORequest(msgport, sizeof(struct IOStdReq)))!=0) {
+      if((ioreq2=CreateIORequest(msgport, sizeof(struct IOStdReq)))!=0) {
+        if((ioreqchangeint=CreateIORequest(msgport, sizeof(struct IOStdReq)))!=0) {
+          if((errorcode=OpenDevice(devicename, unit, (struct IORequest *)ioreq, flags))==0) {
+            deviceopened=TRUE;
+
+            fsioreq.ioreq=ioreq;
+
+            ioreq2->io_Device=ioreq->io_Device;
+            ioreq2->io_Unit=ioreq->io_Unit;
+
+            ioreqchangeint->io_Device=ioreq->io_Device;
+            ioreqchangeint->io_Unit=ioreq->io_Unit;
+
+            changegeometry(de);
+
+            if(de->de_TableSize>=12) {
+              bufmemtype=de->de_BufMemType;
+
+              if(de->de_TableSize>=13) {
+                blocks_maxtransfer=de->de_MaxTransfer>>shifts_block;
+
+                if(blocks_maxtransfer==0) {
+                  blocks_maxtransfer=1;
+                }
+
+                if(de->de_TableSize>=14) {
+                  mask_mask=de->de_Mask;
+                }
+              }
+            }
+
+            /* If the partition's high byte is beyond the 4 GB border we will
+               try and detect a 64-bit device. */
+
+            if(byte_highh!=0) {  /* Check for 64-bit support (NSD/TD64/SCSI direct) */
+              struct NSDeviceQueryResult nsdqr;
+              UWORD *cmdcheck;
+
+              nsdqr.SizeAvailable=0;
+              nsdqr.DevQueryFormat=0;
+
+              ioreq->io_Command=NSCMD_DEVICEQUERY;
+              ioreq->io_Length=sizeof(nsdqr);
+              ioreq->io_Data=(APTR)&nsdqr;
+
+              if(DoIO((struct IORequest *)ioreq)==0 && (ioreq->io_Actual >= 16) && (nsdqr.SizeAvailable == ioreq->io_Actual) && (nsdqr.DeviceType == NSDEVTYPE_TRACKDISK)) {
+                /* This must be a new style trackdisk device */
+
+//                req("New style device", "Ok");
+
+                newstyledevice=TRUE;
+
+//                DEBUG(("Device is a new style device\n"));
+
+                /* Is it safe to use 64 bits with this driver?  We can reject
+                   bad mounts pretty easily via this check. */
+
+                for(cmdcheck=nsdqr.SupportedCommands; *cmdcheck; cmdcheck++) {
+                  if(*cmdcheck == NSCMD_TD_READ64) {
+                    /* This trackdisk style device supports the complete 64-bit
+                       command set without returning IOERR_NOCMD! */
+
+//                    DEBUG(("Device supports 64-bit commands\n"));
+
+                    does64bit=TRUE;
+                    cmdread=NSCMD_TD_READ64;
+                    cmdwrite=NSCMD_TD_WRITE64;
+                  }
+                }
+              }
+              else {  /* Check for TD64 supporting devices */
+                LONG td64errorcode;
+
+                ioreq->io_Command=24;  /* READ64 */
+                ioreq->io_Length=0;
+                ioreq->io_Actual=0;
+                ioreq->io_Offset=0;
+                ioreq->io_Data=0;
+
+                td64errorcode=DoIO((struct IORequest *)ioreq);
+                if(td64errorcode!=-1 && td64errorcode!=IOERR_NOCMD) {
+//                  req("TD64 device", "Ok");
+
+                  does64bit=TRUE;
+                  cmdread=24;
+                  cmdwrite=25;
+                }
+                else {  /* Check for SCSI direct supporting devices */
+                  UWORD *destbuffer;
+
+                  if((destbuffer=AllocVec(bytes_sector,bufmemtype))!=0) {
+                    ioreq->io_Command=HD_SCSICMD;
+                    ioreq->io_Length=sizeof(struct SCSICmd);
+                    ioreq->io_Data=&scsicmd;
+
+                    scsicmd.scsi_Data=(UWORD *)destbuffer;
+                    scsicmd.scsi_Length=bytes_sector;
+                    scsicmd.scsi_Command=(UBYTE *)&scsi10cmd;
+                    scsicmd.scsi_CmdLength=sizeof(struct SCSI10Cmd);
+
+                    scsicmd.scsi_Flags=SCSIF_READ;
+
+                    scsicmd.scsi_SenseData=NULL;
+                    scsicmd.scsi_SenseLength=0;
+                    scsicmd.scsi_SenseActual=0;
+
+                    scsi10cmd.Opcode=SCSICMD_READ10;
+                    scsi10cmd.Lun=0;
+                    scsi10cmd.LBA=sector_low;
+                    scsi10cmd.Reserved=0;
+                    scsi10cmd.Control=0;
+
+                    {
+                      UWORD *ptr=(UWORD *)&scsi10cmd.Length[0];
+
+                      //  scsi10cmd.Length=blocks*sectors_block;       /* Odd aligned... */
+                      *ptr=1;
+                    }
+
+                    if((td64errorcode=DoIO((struct IORequest *)ioreq))==0) {
+//                      req("SCSI direct command returned no error.", "Ok");
+
+                      does64bit=TRUE;
+                      scsidirect=TRUE;
+                      cmdread=SCSICMD_READ10;
+                      cmdwrite=SCSICMD_WRITE10;
+                    }
+
+                    FreeVec(destbuffer);
+                  }
+                  else {
+//                    req("Not enough memory.", "Ok");
+                    errorcode=ERROR_NO_FREE_STORE;
+                  }
+                }
+              }
+
+              if(does64bit==FALSE) {
+                errorcode=ERROR_NO_64BIT_SUPPORT;
+//                req("There is no 64-bit support, but your\n"\
+//                    "partition was (partially) located above 4 GB.", "Ok");
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if(errorcode!=0) {
+    cleanupdeviceio();
+  }
+
+  return(errorcode);
+}
+
+
+
+void cleanupdeviceio() {
+  if(deviceopened) {
+    CloseDevice((struct IORequest *)ioreq);
+  }
+
+  if(ioreq!=0) {
+    DeleteIORequest(ioreq);
+  }
+
+  if(ioreq2!=0) {
+    DeleteIORequest(ioreq2);
+  }
+
+  if(ioreqchangeint!=0) {
+    DeleteIORequest(ioreqchangeint);
+  }
+
+  if(msgport!=0) {
+    DeleteMsgPort(msgport);
+  }
+}
+
+
+
+void setiorequest(struct fsIORequest *fsi, UWORD action, UBYTE *buffer, ULONG blockoffset, ULONG blocks) {
+  struct IOStdReq *ioreq=fsi->ioreq;
+
+  if(scsidirect==TRUE) {
+    ioreq->io_Command=HD_SCSICMD;
+    ioreq->io_Length=sizeof(struct SCSICmd);
+    ioreq->io_Data=&fsi->scsicmd;
+
+    fsi->scsicmd.scsi_Data      = (UWORD *)buffer;
+    fsi->scsicmd.scsi_Length    = blocks<<shifts_block;
+    fsi->scsicmd.scsi_Command   = (UBYTE *)&fsi->scsi10cmd;
+    fsi->scsicmd.scsi_CmdLength = sizeof(struct SCSI10Cmd);
+
+    if(action==DIO_READ) {
+      fsi->scsicmd.scsi_Flags=SCSIF_READ;
+    }
+    else {
+      fsi->scsicmd.scsi_Flags=0;
+    }
+    fsi->scsicmd.scsi_SenseData   = NULL;
+    fsi->scsicmd.scsi_SenseLength = 0;
+    fsi->scsicmd.scsi_SenseActual = 0;
+
+    fsi->scsi10cmd.Opcode   = action==DIO_WRITE ? cmdwrite : cmdread;       // SCSICMD_READ10 or SCSICMD_WRITE10;
+    fsi->scsi10cmd.Lun      = 0;
+    fsi->scsi10cmd.LBA      = sector_low+blockoffset*sectors_block;
+    fsi->scsi10cmd.Reserved = 0;
+    fsi->scsi10cmd.Control  = 0;
+
+    {
+      UWORD *ptr=(UWORD *)&fsi->scsi10cmd.Length[0];
+
+      //  scsi10cmd.Length=blocks*sectors_block;       /* Odd aligned... */
+      *ptr=blocks*sectors_block;
+    }
+  }
+  else {
+    ULONG start=(blockoffset<<shifts_block)+byte_low;
+    ULONG starthigh=(blockoffset>>(32-shifts_block))+byte_lowh;            /* High offset */
+
+    if(start < byte_low) {
+      starthigh+=1;     /* Add X bit :-) */
+    }
+
+    ioreq->io_Data    = buffer;
+    ioreq->io_Command = action==DIO_WRITE ? cmdwrite : cmdread;
+    ioreq->io_Length  = blocks<<shifts_block;
+    ioreq->io_Offset  = start;
+    ioreq->io_Actual  = starthigh;
+  }
+}
+
+
+
+LONG transfer(UWORD action, UBYTE *buffer, ULONG blockoffset, ULONG blocklength) {
+  ULONG command, blocks;
+  ULONG start, starthigh, end,endhigh;
+  ULONG maxblocks=blocks_maxtransfer;
+  UBYTE *destbuffer;
+  UBYTE *tempbuffer=0;
+  LONG errorcode;
+
+  if(action==DIO_READ) {
+    DEBUG(("Reading %ld blocks from block %ld.\n", blocklength, blockoffset));
+    command=cmdread;
+  }
+  else if(action==DIO_WRITE) {
+    DEBUG(("Writing %ld blocks to block %ld.\n", blocklength, blockoffset));
+    command=cmdwrite;
+  }
+  else {
+    return(-1);
+  }
+
+  if(((ULONG)buffer & ~mask_mask)!=0 && (errorcode=getbuffer(&tempbuffer, &maxblocks))!=0) {
+    return(errorcode);
+  }
+
+  while(blocklength!=0) {
+    blocks=blocklength;
+    if(blocks>maxblocks) {
+      blocks=maxblocks;
+    }
+
+    start=(blockoffset<<shifts_block)+byte_low;
+    starthigh=(blockoffset>>(32-shifts_block))+byte_lowh;            /* High offset */
+    if(start < byte_low) {
+      starthigh+=1;     /* Add X bit :-) */
+    }
+
+    end=start+(blocks<<shifts_block);
+    endhigh=starthigh;
+    if(end < start) {
+      endhigh+=1;       /* Add X bit */
+    }
+
+    if(tempbuffer!=0) {
+      destbuffer=tempbuffer;
+    }
+    else {
+      destbuffer=buffer;
+    }
+
+    if(scsidirect==TRUE) {
+      ioreq->io_Command=HD_SCSICMD;
+      ioreq->io_Length=sizeof(struct SCSICmd);
+      ioreq->io_Data=&scsicmd;
+
+      scsicmd.scsi_Data=(UWORD *)destbuffer;
+      scsicmd.scsi_Length=blocks<<shifts_block;
+      scsicmd.scsi_Command=(UBYTE *)&scsi10cmd;
+      scsicmd.scsi_CmdLength=sizeof(struct SCSI10Cmd);
+
+      if(command==SCSICMD_READ10) {
+        scsicmd.scsi_Flags=SCSIF_READ;
+      }
+      else {
+        scsicmd.scsi_Flags=0;
+      }
+      scsicmd.scsi_SenseData=NULL;
+      scsicmd.scsi_SenseLength=0;
+      scsicmd.scsi_SenseActual=0;
+
+      scsi10cmd.Opcode=command;       // SCSICMD_READ10 or SCSICMD_WRITE10;
+      scsi10cmd.Lun=0;
+      scsi10cmd.LBA=sector_low+blockoffset*sectors_block;
+      scsi10cmd.Reserved=0;
+      scsi10cmd.Control=0;
+
+      {
+        UWORD *ptr=(UWORD *)&scsi10cmd.Length[0];
+
+        //  scsi10cmd.Length=blocks*sectors_block;       /* Odd aligned... */
+        *ptr=blocks*sectors_block;
+      }
+    }
+    else {
+      ioreq->io_Data=destbuffer;
+      ioreq->io_Command=command;
+      ioreq->io_Length=blocks<<shifts_block;
+      ioreq->io_Offset=start;
+      ioreq->io_Actual=starthigh;
+    }
+
+    if(tempbuffer!=0 && action==DIO_WRITE) {
+      CopyMem(buffer,tempbuffer,blocks<<shifts_block);
+    }
+
+    if(  ( starthigh > byte_lowh || (starthigh == byte_lowh && start >= byte_low) ) &&
+         ( endhigh < byte_highh || (endhigh == byte_highh && end <= byte_high) )  ) {
+
+      /* We're about to do a physical disk access.  (Re)set timeout.  Since
+         the drive's motor will be turned off with the timeout as well we
+         always (re)set the timeout even if doio() would return an error. */
+
+      starttimeout();
+
+      while((errorcode=DoIO((struct IORequest *)ioreq))!=0) {
+        if(errorcode==TDERR_DiskChanged) {
+          if(req("You MUST reinsert this volume!\n"\
+                 "There still was some data which needs to be transferred.", "Retry|Cancel")<=0) {
+            break;
+          }
+        }
+        else if(errorcode==TDERR_WriteProt || (action==DIO_WRITE && writeprotection()==ID_WRITE_PROTECTED)) {
+          if(req("This volume is write protected.", "Retry|Cancel")<=0) {
+            errorcode=ERROR_DISK_WRITE_PROTECTED;
+            break;
+          }
+        }
+        else {
+          if(req("There was an error while accessing this volume:\n\n%s"\
+                 "errorcode = %ld\n"\
+                 "io_Command = %ld\n"\
+                 "io_Offset = %ld\n"\
+                 "io_Length = %ld\n"\
+                 "io_Actual = %ld\n", "Retry|Cancel", errordescription(errorcode), errorcode, (ULONG)ioreq->io_Command, ioreq->io_Offset, ioreq->io_Length, ioreq->io_Actual)<=0) {
+            break;
+          }
+        }
+      }
+
+      if(errorcode!=0) {
+        return(errorcode);
+      }
+    }
+    else {
+      req("This volume tried to access a block\n"\
+          "outside its partition.\n"\
+          "(blockoffset = %ld, blocks = %ld)\n", "Ok", blockoffset, blocks);
+
+      return(ERROR_OUTSIDE_PARTITION);
+    }
+
+    if(tempbuffer!=0 && action==DIO_READ) {
+      CopyMem(tempbuffer, buffer, blocks<<shifts_block);
+    }
+
+    blocklength-=blocks;
+    blockoffset+=blocks;
+    buffer+=blocks<<shifts_block;
+  }
+
+  return(0);
+}

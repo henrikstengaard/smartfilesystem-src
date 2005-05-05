@@ -1,0 +1,4 @@
+FROM LIB:c.o "BOOT:Work/FS/DebugTools/examine2.o"
+TO "BOOT:Work/FS/DebugTools/examine2"
+LIB LIB:sc.lib LIB:amiga.lib
+

@@ -1,0 +1,143 @@
+Diskspeed is a small program to test how well your disk
+performs.  I've created it to test the performance of Smart
+Filesystem when compared with other filesystems.
+
+I wrote my own Diskspeed because the most populair Diskspeed
+4.2 tool doesn't provide very realistic information.  The
+reason why the information isn't very realistic (especially
+the directory manipulation tests) is because Diskspeed 4.2
+doesn't use a large enough set of data for its tests (so it
+is easily cached resulting in unrealisticly high
+performance).
+
+This tool will try to provide more realistic results.
+
+
+
+This tool only works from a Cli or Shell.  Below a summary
+of its command line options:
+
+CREATE (The Create Files test)
+
+By default this test creates 1000 files of 128 bytes each
+and measures the time required.  You can change the number
+of files it creates using the FILES parameter.  The size of
+each file can be controlled with the CREATESIZE option.
+
+The files created by this test are used by the Open/Close,
+Lock/Unlock, Load and Delete test.  If any of those tests
+are specified then this test will automatically be executed
+as well.
+
+
+DELETE (The Delete Files test)
+
+This test measures the time it takes to delete all the files
+previously created by the Create Files test.  The number and
+size of the files created by the Create Files test can be
+used to influence the results of this test.
+
+When you specificy the Delete Files test then the Create
+Files test will automatically be executed as well.
+
+
+DIRSCAN (The directory scan test)
+
+Measures how fast a directory can be read using the
+directory created by the Create Files test.
+
+When you specificy the Delete Files test then the Create
+Files test will automatically be executed as well.
+
+
+OPENCLOSE (The Open/Close test)
+
+This test open and closes random files earlier created by
+the Create Files test.  It measures the time the filesystem
+requires to look up a random file and open it.  It is very
+similair to the Lock/Unlock test.  The speed of this test is
+very dependant on the number of files created by Create
+Files.  If you for example use 10000 files then looking up a
+file in such a large directory can be a lot slower than with
+a directory of just 50 files (in this last case, those 50
+files can often be kept in cache, which gives unrealistic
+results).
+
+When you specificy the Open/Close test then the Create Files
+and the Delete Files test will automatically be executed as
+well.
+
+
+LOCKUNLOCK (The Lock/Unlock test)
+
+Very similair to the Open/Close test.  It locks random files
+earlier created by the Create Files test and unlocks them
+again.  The speed difference with the Open/Close test and
+this test is usually quite small.
+
+When you specificy the Open/Close test then the Create Files
+and the Delete Files test will automatically be executed as
+well.
+
+
+LOAD (The Load test)
+
+This test is a combination of opening a file, reading it
+into memory and closing it again.  It does this for random
+files using the files created earlier by the Create Files
+test.  The number of files created and their size will have
+a great influence on the speed of this test.
+
+When you specificy the Open/Close test then the Create Files
+and the Delete Files test will automatically be executed as
+well.
+
+
+READ (The Read test)
+
+A file is created from which data is read sequentially using
+a specific buffer size.  The speed of the reads themselves
+are measured.  The time to create the file from which data
+is read is not included.
+
+Use READSIZE to set the buffer size.
+
+
+WRITE (The Write test)
+
+Tests the speed of writing data to a new file.  An empty
+file is created and using a specific buffer size we add data
+to it.  Only the actual writes are measured; the time to
+create the file and delete it again is not included.
+
+Use WRITESIZE to set the buffer size.
+
+
+SEEK (The Seek/Read test)
+
+This test seeks to random locations in a previously created
+file and reads a specific number of bytes from that
+location.  The size of the file and the number of bytes read
+after seeking can have great influence on the speed of this
+test.
+
+Use SEEKSIZE to control the amount of bytes read at each
+seek position.
+
+
+
+Examples:
+---------
+
+Diskspeed CREATE FILES=750 CREATESIZE=1024
+
+-> Runs the Create Files and the Delete Files test, using
+   750 files of 1024 bytes each.
+
+Diskspeed READ READSIZE=512
+Diskspeed READ READSIZE=4096
+Diskspeed READ READSIZE=32768
+Diskspeed READ READSIZE=262144
+
+-> Runs the Read test 4 times in a row, with a different
+   buffer size each time.
