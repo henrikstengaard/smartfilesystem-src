@@ -23,7 +23,6 @@ extern void outputcachebuffer(struct CacheBuffer *cb);
 extern void dumpcachebuffers(void);
 extern void dreq(UBYTE *fmt, ... );
 
-extern WORD __asm COMPRESSFROMZERO(register __a0 UWORD *,register __a1 UBYTE *,register __d0 ULONG);
 extern void setchecksum(struct CacheBuffer *);
 
 extern ULONG blocks_total;               /* size of the partition in blocks */
@@ -455,7 +454,6 @@ LONG compresscachebuffer(struct CacheBuffer *cb_org,struct CacheBuffer *cb_new) 
   }
   else {
     length=compressfromzero(cb_new->data,compressbuffer);
-//    length=COMPRESSFROMZERO(cb_new->data,compressbuffer,bytes_block);
   }
 
   if((cb_new->bits & CB_EMPTY)!=0) {
