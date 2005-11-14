@@ -2,6 +2,8 @@
 #define _DEVICEIO_PROTOS_H
 
 #include <exec/types.h>
+#include <exec/tasks.h>
+#include <dos/filehandler.h>
 
 void update(void);
 void motoroff(void);
