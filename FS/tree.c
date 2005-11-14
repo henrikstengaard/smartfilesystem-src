@@ -1,14 +1,9 @@
+
+#include <exec/types.h>
+#include "tree.h"
+
 /* Code to work with trees and to keep the tree balanced.  The tree is
    a weighted tree which will be kept optimal at all times. */
-
-
-struct TreeNode {
-  struct TreeNode *parent;
-  struct TreeNode *left;
-  struct TreeNode *right;
-  ULONG data;   /* the sort criteria -- user defined */
-  UWORD weight;
-};
 
 
 
