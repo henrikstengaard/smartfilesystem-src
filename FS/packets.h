@@ -1,3 +1,5 @@
+#ifndef _PACKETS_H
+#define _PACKETS_H
 
 #define SFS_PACKET_BASE         (0xf00000)
 
@@ -207,3 +209,5 @@ Example 2:
    either.
 
 */
+
+#endif // _PACKETS_H

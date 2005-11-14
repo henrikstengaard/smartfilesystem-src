@@ -1,3 +1,6 @@
+#ifndef _TRANSACTIONS_H
+#define _TRANSACTIONS_H
+
 #include <exec/types.h>
 #include <libraries/iffparse.h>
 #include "blockstructure.h"
@@ -59,3 +62,5 @@ struct fsTransactionFailure {
 
   BLCK firsttransaction;
 };
+
+#endif // _TRANSACTIONS_H

@@ -1,3 +1,6 @@
+#ifndef _OBJECTS_H
+#define _OBJECTS_H
+
 #include <exec/types.h>
 #include <libraries/iffparse.h>
 #include <utility/tagitem.h>
@@ -245,3 +248,5 @@ struct fsObjectNode {
 
 #define CO_SOFTLINK       (COBASE+40)  /* The Softlink string.  No default!  Ignored if CO_BITS
                                           indicates its not a softlink. */
+
+#endif // _OBJECTS_H

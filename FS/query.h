@@ -1,3 +1,5 @@
+#ifndef _QUERY_H
+#define _QUERY_H
 
 /* Tags used by ACTION_SFS_QUERY: */
 
@@ -75,3 +77,5 @@
 #define ASS_INACTIVITY_FLUSH_TIMEOUT (ASSBASE+1002)  /* Maximum time in seconds SFS waits to update
                                                         the drive when there is no more activity.
                                                         The default is 1 second. */
+
+#endif // _QUERY_H

@@ -1,3 +1,6 @@
+#ifndef _OBJECTS_PROTOS_H
+#define _OBJECTS_PROTOS_H
+
 #include <exec/types.h>
 #include "blockstructure.h"
 #include "cachebuffers.h"
@@ -24,3 +27,5 @@ BOOL cleanupdeletedfiles(void);
 LONG setrecycledinfo(ULONG deletedfiles, ULONG deletedblocks);
 LONG setrecycledinfodiff(LONG deletedfiles, LONG deletedblocks);
 LONG getrecycledinfo(ULONG *returned_deletedfiles, ULONG *returned_deletedblocks);
+
+#endif // _OBJECTS_PROTOS_H

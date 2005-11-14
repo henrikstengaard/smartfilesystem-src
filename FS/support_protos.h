@@ -1,3 +1,6 @@
+#ifndef _SUPPORT_PROTOS_H
+#define _SUPPORT_PROTOS_H
+
 #include <dos/dos.h>
 #include <exec/types.h>
 
@@ -21,3 +24,5 @@ void ClearMemQuick(void *mem, LONG bytes);
 // void checksum_writelong(struct fsBlockHeader *bh, void *dest, ULONG data);
 
 UWORD mergediffs(UBYTE *olddiff, UBYTE *newdiff, UWORD length, ULONG *new, ULONG *org, UBYTE *modifiedblocks);
+
+#endif // _SUPPORT_PROTOS_H

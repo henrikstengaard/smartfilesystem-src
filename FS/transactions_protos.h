@@ -1,3 +1,6 @@
+#ifndef _TRANSACTIONS_PROTOS_H
+#define _TRANSACTIONS_PROTOS_H
+
 #include <exec/types.h>
 #include "blockstructure.h"
 #include "cachebuffers.h"
@@ -27,3 +30,5 @@ void cleanuptransactions(void);
 BOOL hastransaction(void);
 
 void restorecachebuffer(struct CacheBuffer *cb);
+
+#endif // _TRANSACTIONS_PROTOS_H
