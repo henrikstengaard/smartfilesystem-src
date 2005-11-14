@@ -759,7 +759,7 @@ ULONG getdate(void) {
 }
 
 
-/*
+#if 0
 
 void mergediffs(ULONG *current, UBYTE *olddiff, UWORD length, UBYTE *newdiff, UWORD *offsets) {
   ULONG *newdiffl;
@@ -1070,7 +1070,7 @@ UWORD compressfromzero(ULONG *new, UBYTE *dest) {
   }
 }
 
-*/
+#endif
 
 
 
@@ -1471,7 +1471,7 @@ UWORD compressfromzero(ULONG *new, UBYTE *diff) {
 
 
 
-/*
+#if 0
 void checksum_writelong(struct fsBlockHeader *bh, void *dest, ULONG data) {
   ULONG original;
 
@@ -1490,4 +1490,4 @@ void checksum_writelong(struct fsBlockHeader *bh, void *dest, ULONG data) {
 
   bh->checksum=~(~bh->checksum - original + data);
 }
-*/
+#endif
