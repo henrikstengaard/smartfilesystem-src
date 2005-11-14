@@ -1,8 +1,12 @@
 #ifndef _DEBUG_H
 #define _DEBUG_H
 
+#include <exec/types.h>
+
 #include "debug_protos.h"
 #include "fs.h"
+
+extern ULONG mask_debug;
 
 #ifdef DEBUGCODE
 
@@ -10,9 +14,29 @@
 
         #include <aros/debug.h>
         
-        #define TDEBUG(x) bug(x)
-        #define DEBUG(x) bug(x)
-        #define XDEBUG(x) bug(x)
+        #define TDEBUG(x)                                           \
+                do {                                                \
+                    struct DateStamp ds;                            \
+                    DateStamp(&ds);                                 \
+                    bug("%4ld.%4ld ", ds.ds_Minute, ds.ds_Tick*2);  \
+                    bug x;                                         \
+                } while (0)
+
+        #define DEBUG(x) bug x
+
+        #define xdebug(type,x...)                                   \
+                do {                                                \
+                    ULONG debug=mask_debug;                         \
+                    ULONG debugdetailed=mask_debug &                \
+                        ~(DEBUG_CACHEBUFFER|DEBUG_NODES|DEBUG_LOCK|DEBUG_BITMAP);   \
+                    if((debugdetailed & type)!=0 || ((type & 1)==0 && (debug & type)!=0)) \
+                    {                                               \
+                        bug(x);                                     \
+                    }                                               \
+                } while (0)
+  
+        #define XDEBUG(x) xdebug x
+  
   
   #else
 
