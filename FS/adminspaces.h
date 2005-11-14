@@ -1,3 +1,6 @@
+#ifndef _ADMINSPACES_H
+#define _ADMINSPACES_H
+
 #include <exec/types.h>
 #include <libraries/iffparse.h>
 #include "blockstructure.h"
@@ -56,3 +59,5 @@ struct fsAdminSpaceContainer {
 
 
 */
+
+#endif // _ADMINSPACES_H
