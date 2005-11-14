@@ -8,8 +8,11 @@
 #include "debug.h"
 #include "fs.h"
 #include "transactions_protos.h"
-#include "/bitfuncs_protos.h"
+#include "../bitfuncs_protos.h"
 
+#ifdef __AROS__
+    #include "../aros/bitfuncs.h"
+#endif
 
 extern LONG readcachebuffercheck(struct CacheBuffer **,ULONG,ULONG);
 
