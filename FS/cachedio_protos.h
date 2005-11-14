@@ -1,4 +1,8 @@
+#ifndef _CACHEDIO_PROTOS_H
+#define _CACHEDIO_PROTOS_H
+
 #include <exec/types.h>
+#include <dos/filehandler.h>
 #include "blockstructure.h"
 
 LONG read(BLCK block, UBYTE *buffer, ULONG blocks);
@@ -17,3 +21,5 @@ BYTE queryiocache_copyback(void);
 
 LONG flushiocache(void);
 void invalidateiocaches(void);
+
+#endif // _CACHEDIO_PROTOS_H

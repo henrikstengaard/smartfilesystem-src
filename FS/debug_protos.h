@@ -1,3 +1,6 @@
+#ifndef _DEBUG_PROTOS_H
+#define _DEBUG_PROTOS_H
+
 #include "fs.h"
 
 #ifdef DEBUGCODE
@@ -13,3 +16,5 @@
     void xkprintf(ULONG type,const char *, ... );
   #endif
 #endif
+
+#endif // _DEBUG_PROTOS_H

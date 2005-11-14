@@ -1,3 +1,6 @@
+#ifndef _CACHEBUFFERS_H
+#define _CACHEBUFFERS_H
+
 #include <exec/nodes.h>
 #include <exec/types.h>
 
@@ -41,3 +44,5 @@ struct CacheBuffer {
 
   An exception to this rule could be none set at all, which would indicate an unused cachebuffer.
 */
+
+#endif // _CACHEBUFFERS_H

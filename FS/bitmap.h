@@ -1,3 +1,6 @@
+#ifndef _BITMAP_H
+#define _BITMAP_H
+
 #include <exec/types.h>
 #include <libraries/iffparse.h>
 #include "blockstructure.h"
@@ -31,3 +34,5 @@ struct fsBitmap {
   /* Bits are 1 if the block is free, and 0 if full.
      Bitmap must consist of an integral number of longwords. */
 };
+
+#endif // _BITMAP_H

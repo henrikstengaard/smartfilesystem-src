@@ -1,3 +1,6 @@
+#ifndef _BTREENODES_H
+#define _BTREENODES_H
+
 #include <exec/types.h>
 #include <libraries/iffparse.h>
 #include "blockstructure.h"
@@ -23,3 +26,5 @@ struct fsBNodeContainer {
   struct fsBlockHeader bheader;
   struct BTreeContainer btc;
 };
+
+#endif // _BTREENODES_H

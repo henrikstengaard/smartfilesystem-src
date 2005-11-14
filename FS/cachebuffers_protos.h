@@ -1,3 +1,6 @@
+#ifndef _CACHEBUFFERS_PROTOS_H
+#define _CACHEBUFFERS_PROTOS_H
+
 #include <exec/types.h>
 #include "blockstructure.h"
 #include "cachebuffers.h"
@@ -36,3 +39,5 @@ LONG addcachebuffers(LONG buffers);
 void invalidatecachebuffers(void);
 
 void dumpcachebuffers(void);
+
+#endif // _CACHEBUFFERS_PROTOS_H

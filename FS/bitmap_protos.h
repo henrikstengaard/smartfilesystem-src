@@ -1,3 +1,6 @@
+#ifndef _BITMAP_PROTOS_H
+#define _BITMAP_PROTOS_H
+
 #include <exec/types.h>
 #include "blockstructure.h"
 
@@ -17,3 +20,5 @@ LONG smartfindandmarkspace(BLCK startblock,ULONG blocksneeded);
 LONG getusedblocks(ULONG *returned_usedblocks);
 LONG getfreeblocks(ULONG *returned_freeblocks);
 LONG setfreeblocks(ULONG freeblocks);
+
+#endif // _BITMAP_PROTOS_H

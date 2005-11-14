@@ -1,5 +1,5 @@
-#ifndef BLOCK_STRUCTURE_H
-#define BLOCK_STRUCTURE_H
+#ifndef _BLOCKSTRUCTURE_H
+#define _BLOCKSTRUCTURE_H
 
 #include <exec/types.h>
 
@@ -43,7 +43,7 @@ struct fsBlockHeader {
 struct fsBootBlock {
   struct fsBlockHeader bheader;
 
-  UWORD version;                   /* Version number of the filesystem block structure */
+  UWORD version;                   // Version number of the filesystem block structure
 };
 */
 
@@ -136,4 +136,4 @@ struct fsExtentBNode {
   UWORD blocks;  /* The size in blocks of the region this Extent controls */
 };
 
-#endif
+#endif // _BLOCKSTRUCTURE_H

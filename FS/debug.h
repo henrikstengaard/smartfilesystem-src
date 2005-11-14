@@ -1,3 +1,6 @@
+#ifndef _DEBUG_H
+#define _DEBUG_H
+
 #include "debug_protos.h"
 #include "fs.h"
 
@@ -44,3 +47,5 @@
 #define DDEBUG_LOCK        (DEBUG_DETAILED + DEBUG_LOCK)
 #define DDEBUG_OBJECTS     (DEBUG_DETAILED + DEBUG_OBJECTS)
 #define DDEBUG_TRANSACTION (DEBUG_DETAILED + DEBUG_TRANSACTION)
+
+#endif // _DEBUG_H
