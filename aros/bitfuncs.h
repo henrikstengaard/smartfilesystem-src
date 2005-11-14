@@ -39,7 +39,7 @@ static inline int fls(int mask)
 
 /* Finds first set bit in /data/ starting at /bitoffset/.  This function
    considers the MSB to be the first bit. */
-static inline int bfffo(ULONG data, int bitoffset)
+inline WORD bfffo(ULONG data, WORD bitoffset)
 {
 	ULONG mask = 0xffffffff >> bitoffset;
 	data &= mask;
@@ -48,14 +48,14 @@ static inline int bfffo(ULONG data, int bitoffset)
 
 /* Finds first zero bit in /data/ starting at /bitoffset/.  This function
    considers the MSB to be the first bit. */
-static inline int bfffz(ULONG data, int bitoffset)
+inline WORD bfffz(ULONG data, WORD bitoffset)
 {
 	return bfffo(~data, bitoffset);
 }
 
 /* Sets /bits/ bits starting from /bitoffset/ in /data/.
    /bits/ must be between 1 and 32. */
-static inline ULONG bfset(ULONG data, int bitoffset, int bits)
+inline ULONG bfset(ULONG data, WORD bitoffset, WORD bits)
 {
 	ULONG mask = ~((1 << (32 - bits)) - 1);
 	mask >>= bitoffset;
@@ -64,7 +64,7 @@ static inline ULONG bfset(ULONG data, int bitoffset, int bits)
 
 /* Clears /bits/ bits starting from /bitoffset/ in /data/.
    /bits/ must be between 1 and 32. */
-static inline ULONG bfclr(ULONG data, int bitoffset, int bits)
+inline ULONG bfclr(ULONG data, WORD bitoffset, WORD bits)
 {
 	ULONG mask = ~((1 << (32 - bits)) - 1);
 	mask >>= bitoffset;
@@ -72,10 +72,10 @@ static inline ULONG bfclr(ULONG data, int bitoffset, int bits)
 }
 
 /* bm??? functions assumes that in-memory bitmap is in bigendian byte order */
-int bmffo(ULONG *, int, int);
-int bmffz(ULONG *, int, int);
-int bmclr(ULONG *, int, int, int);
-int bmset(ULONG *, int, int, int);
+LONG bmffo(ULONG *, LONG, LONG);
+LONG bmffz(ULONG *, LONG, LONG);
+LONG bmclr(ULONG *, LONG, LONG, LONG);
+LONG bmset(ULONG *, LONG, LONG, LONG);
 
 #endif
 

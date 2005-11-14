@@ -20,7 +20,7 @@
    with /bitoffset/.  The region of memory is /longs/ longs long.  It
    returns the bitoffset of the first set bit it finds. */
 
-int bmffo(ULONG *bitmap, int longs, int bitoffset)
+LONG bmffo(ULONG *bitmap, LONG longs, LONG bitoffset)
 {
 	ULONG *scan = bitmap;
 	int longoffset, bit;
@@ -52,7 +52,7 @@ int bmffo(ULONG *bitmap, int longs, int bitoffset)
    with /bitoffset/.  The region of memory is /longs/ longs long.  It
    returns the bitoffset of the first unset bit it finds. */
 
-int bmffz(ULONG *bitmap, int longs, int bitoffset)
+LONG bmffz(ULONG *bitmap, LONG longs, LONG bitoffset)
 {
 	ULONG *scan = bitmap;
 	int longoffset, bit;
@@ -87,7 +87,7 @@ int bmffz(ULONG *bitmap, int longs, int bitoffset)
    memory region.  In any case it returns the number of bits which
    were actually cleared. */
 
-int bmclr(ULONG *bitmap, int longs, int bitoffset, int bits)
+LONG bmclr(ULONG *bitmap, LONG longs, LONG bitoffset, LONG bits)
 {
 	ULONG *scan = bitmap;
 	int longoffset;
@@ -132,7 +132,7 @@ int bmclr(ULONG *bitmap, int longs, int bitoffset, int bits)
    memory region.  In any case it returns the number of bits which
    were actually set. */
 
-int bmset(ULONG *bitmap, int longs, int bitoffset, int bits)
+LONG bmset(ULONG *bitmap, LONG longs, LONG bitoffset, LONG bits)
 {
 	ULONG *scan = bitmap;
 	int longoffset;
