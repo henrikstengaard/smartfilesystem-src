@@ -1,4 +1,6 @@
 #include <exec/types.h>
+#include <exec/memory.h>
+#include <proto/exec.h>
 #include <stdio.h>
 
 /*
@@ -32,6 +34,11 @@ current leaf-container.
 
 #define BRANCHES (4)
 
+struct TreeNode {
+  ULONG key;
+  ULONG data;
+};
+
 struct TreeContainer {
   struct TreeContainer *parent;
   struct TreeContainer *next;
@@ -41,11 +48,6 @@ struct TreeContainer {
   UWORD pad2;
 
   struct TreeNode treenode[BRANCHES];
-};
-
-struct TreeNode {
-  ULONG key;
-  ULONG data;
 };
 
 
@@ -79,7 +81,7 @@ void printtree(struct TreeContainer *tc) {
   if(tc->isleaf==FALSE) {
     struct TreeContainer *tc2;
 
-    tc=tc->treenode[0];
+    tc=(struct TreeContainer *)&tc->treenode[0];
     tc2=tc;
 
     while(tc2!=0) {
@@ -92,7 +94,7 @@ void printtree(struct TreeContainer *tc) {
 
 
     if(tc->isleaf==FALSE) {
-      tc=tc->treenode[0];
+      tc=(struct TreeContainer *)&tc->treenode[0];
       tc2=tc;
 
       while(tc2!=0) {
@@ -112,13 +114,13 @@ LONG addnode(ULONG key,ULONG data,struct TreeContainer *tc) {
     WORD n;
 
     if(tc->nodecount<2) {
-      tc=tc->treenode[0];
+      tc=(struct TreeContainer *)&tc->treenode[0];
     }
     else {
-      tc=tc->treenode[tc->nodecount-1];
+      tc=(struct TreeContainer *)&tc->treenode[tc->nodecount-1];
       for(n=1; n<tc->nodecount-1; n++) {
         if(key < tc->treenode[n].key) {
-          tc=tc->treenode[n-1];
+          tc=(struct TreeContainer *)&tc->treenode[n-1];
           break;
         }
       }
@@ -190,8 +192,8 @@ struct TreeContainer *split(struct TreeContainer *tc) {
     return(0);
   }
 
-  tnsrc=tc->treenode[BRANCHES/2];
-  tndest=tcnew->treenode[0];
+  tnsrc=(struct TreeNode *)&tc->treenode[BRANCHES/2];
+  tndest=(struct TreeNode *)&tcnew->treenode[0];
 
   n=BRANCHES-BRANCHES/2;
   tcnew->nodecount=n;
