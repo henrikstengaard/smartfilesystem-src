@@ -6,19 +6,30 @@
 
 #ifdef DEBUGCODE
 
-  #ifndef DEBUGKPRINTF
+  #ifdef __AROS__
 
-    #define TDEBUG(x) tdebug x
-    #define DEBUG(x) debug x
-    #define XDEBUG(x) xdebug x
-
+        #include <aros/debug.h>
+        
+        #define TDEBUG(x) bug(x)
+        #define DEBUG(x) bug(x)
+        #define XDEBUG(x) bug(x)
+  
   #else
-    #define TDEBUG(x) kprintf x
-    #define DEBUG(x) kprintf x
-    #define XDEBUG(x) xkprintf x
 
+      #ifndef DEBUGKPRINTF
+    
+        #define TDEBUG(x) tdebug x
+        #define DEBUG(x) debug x
+        #define XDEBUG(x) xdebug x
+    
+      #else
+        #define TDEBUG(x) kprintf x
+        #define DEBUG(x) kprintf x
+        #define XDEBUG(x) xkprintf x
+    
+      #endif
+      
   #endif
-
 #else
 
   #define TDEBUG(x)
