@@ -1,3 +1,6 @@
+#ifndef _LOCKS_PROTOS_H
+#define _LOCKS_PROTOS_H
+
 #include <exec/types.h>
 #include "cachebuffers.h"
 #include "locks.h"
@@ -17,3 +20,5 @@ void updatelocksaftermove(BLCK source, BLCK dest, ULONG blocks);
 
 LONG createglobalhandle(struct ExtFileLock *efl);
 struct GlobalHandle *findglobalhandle(NODE objectnode);
+
+#endif // _LOCKS_PROTOS_H

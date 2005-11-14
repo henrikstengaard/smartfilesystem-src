@@ -1,8 +1,9 @@
-#ifndef FS_H
-#define FS_H
+#ifndef _FS_H
+#define _FS_H
 
 #include <exec/types.h>
 #include <libraries/iffparse.h>
+#include <dos/bptr.h>
 
 #define CHECKCODE
 // #define CHECKCODE_SLOW
@@ -47,7 +48,11 @@
 
 /* macros */
 
-#define TOBADDR(x)      (((ULONG)(x)) >> 2)
+#ifndef __AROS__
+    #define TOBADDR(x)      (((ULONG)(x)) >> 2)
+#else
+    #define TOBADDR(x)      (MKBADDR(x))
+#endif
 
 #define remove(n)    (n)->ln_Succ->ln_Pred=(n)->ln_Pred; (n)->ln_Pred->ln_Succ=(n)->ln_Succ
 #define addtail(l,n) (n)->ln_Succ=(l)->lh_TailPred->ln_Succ; (l)->lh_TailPred->ln_Succ=(n); (n)->ln_Pred=(l)->lh_TailPred; (l)->lh_TailPred=(n)
@@ -74,5 +79,4 @@ struct fsStatistics {
   ULONG cachedio_misses;
 };
 
-#endif
-
+#endif // _FS_H

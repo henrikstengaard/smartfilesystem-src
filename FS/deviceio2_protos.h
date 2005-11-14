@@ -1,3 +1,6 @@
+#ifndef _DEVICEIO2_PROTOS_H
+#define _DEVICEIO2_PROTOS_H
+
 #include <exec/types.h>
 #include "blockstructure.h"
 
@@ -11,3 +14,5 @@ LONG transfer(UWORD action, UBYTE *buffer, ULONG blockoffset, ULONG blocklength)
 
 LONG initdeviceio(UBYTE *devicename, ULONG unit, ULONG flags, struct DosEnvec *de);
 void cleanupdeviceio(void);
+
+#endif // _DEVICEIO2_PROTOS_H

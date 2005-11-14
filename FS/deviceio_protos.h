@@ -1,3 +1,6 @@
+#ifndef _DEVICEIO_PROTOS_H
+#define _DEVICEIO_PROTOS_H
+
 #include <exec/types.h>
 
 void update(void);
@@ -17,3 +20,5 @@ void removechangeint(void);
 ULONG getchange(void);
 
 void changegeometry(struct DosEnvec *de);
+
+#endif // _DEVICEIO_PROTOS_H

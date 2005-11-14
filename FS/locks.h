@@ -1,3 +1,6 @@
+#ifndef _LOCKS_H
+#define _LOCKS_H
+
 #include <dos/dos.h>
 #include <exec/types.h>
 #include "nodes.h"
@@ -72,3 +75,5 @@ struct GlobalHandle {
   // UWORD blocks;     /* Blocks in this link */
 
 };
+
+#endif // _LOCKS_H

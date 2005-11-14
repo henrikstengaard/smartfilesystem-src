@@ -1,3 +1,6 @@
+#ifndef _DEVICEIO_H
+#define _DEVICEIO_H
+
 #include <devices/scsidisk.h>
 
 struct SCSI10Cmd {
@@ -56,3 +59,5 @@ struct fsIORequest {
   struct SCSI10Cmd scsi10cmd;
   UWORD action;
 };
+
+#endif // _DEVICEIO_H

@@ -1,3 +1,6 @@
+#ifndef _NODES_H
+#define _NODES_H
+
 #include <exec/types.h>
 #include <libraries/iffparse.h>
 #include "blockstructure.h"
@@ -28,3 +31,5 @@ struct fsNodeContainer {
                               depending on where this NodeIndexContainer is
                               within the Node-tree. */
 };
+
+#endif // _NODES_H
