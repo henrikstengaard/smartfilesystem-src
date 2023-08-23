@@ -1,3 +1,7 @@
+Original SmartFileSystem source code at cvs repo https://sourceforge.net/projects/smartfilesystem converted to git.
+
+-----------------------------------------------------------------------------------
+
 Author: John Hendrikx (hjohn@xs4all.nl)
 Date: July 16th 2000
 
